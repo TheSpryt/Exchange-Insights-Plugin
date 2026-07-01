@@ -1,6 +1,6 @@
-# OSRS Invest — RuneLite plugin
+# Exchange Insights — RuneLite plugin
 
-The companion plugin for the [OSRS Invest](../README.md) dashboard. It streams
+The companion plugin for the [Exchange Insights](../README.md) dashboard. It streams
 data only a logged-in client can see to your service's ingest API
 ([`docs/PLUGIN-INGEST.md`](../docs/PLUGIN-INGEST.md)):
 
