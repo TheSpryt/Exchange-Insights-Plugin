@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2026, OSRS Invest — BSD 2-Clause License (see LICENSE).
+ * Copyright (c) 2026, Exchange Insights — BSD 2-Clause License (see LICENSE).
  */
-package com.osrsinvest;
+package com.exchangeinsights;
 
 import com.google.gson.Gson;
 import java.io.IOException;
@@ -18,7 +18,7 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 
 /**
- * Thin async client for the OSRS Invest ingest API. All sends are fire-and-forget
+ * Thin async client for the Exchange Insights ingest API. All sends are fire-and-forget
  * off the client thread; the server dedupes fills, so a dropped or retried request
  * is harmless. Sends are no-ops until the URL + token are configured.
  */
@@ -27,14 +27,14 @@ import okhttp3.Response;
 class ApiClient
 {
 	private static final MediaType JSON = MediaType.get("application/json");
-	private static final String SOURCE = "osrs-invest-plugin/1.0.0";
+	private static final String SOURCE = "exchange-insights-plugin/1.0.0";
 
 	private final OkHttpClient http;
 	private final Gson gson;
-	private final OsrsInvestConfig config;
+	private final ExchangeInsightsConfig config;
 
 	@Inject
-	ApiClient(OkHttpClient http, Gson gson, OsrsInvestConfig config)
+	ApiClient(OkHttpClient http, Gson gson, ExchangeInsightsConfig config)
 	{
 		this.http = http;
 		this.gson = gson;
@@ -179,7 +179,7 @@ class ApiClient
 		}
 		catch (IllegalArgumentException ex)
 		{
-			log.warn("OSRS Invest: bad dashboard URL '{}'", base, ex);
+			log.warn("Exchange Insights: bad dashboard URL '{}'", base, ex);
 			return;
 		}
 
@@ -188,7 +188,7 @@ class ApiClient
 			@Override
 			public void onFailure(Call call, IOException e)
 			{
-				log.debug("OSRS Invest: {} send failed", path, e);
+				log.debug("Exchange Insights: {} send failed", path, e);
 			}
 
 			@Override
@@ -198,7 +198,7 @@ class ApiClient
 				{
 					if (!r.isSuccessful())
 					{
-						log.debug("OSRS Invest: {} returned {}", path, r.code());
+						log.debug("Exchange Insights: {} returned {}", path, r.code());
 					}
 				}
 			}

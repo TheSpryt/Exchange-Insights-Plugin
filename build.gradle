@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026, OSRS Invest
+ * Copyright (c) 2026, Exchange Insights
  * BSD 2-Clause License — see LICENSE.
  */
 plugins {
@@ -19,7 +19,7 @@ repositories {
 
 // The plugin hub builds against the current client; track the latest release.
 def runeLiteVersion = 'latest.release'
-def pluginMainClass = 'com.osrsinvest.OsrsInvestPluginTest'
+def pluginMainClass = 'com.exchangeinsights.ExchangeInsightsPluginTest'
 
 dependencies {
 	compileOnly group: 'net.runelite', name: 'client', version: runeLiteVersion
@@ -32,7 +32,7 @@ dependencies {
 	testImplementation group: 'junit', name: 'junit', version: '4.13.2'
 }
 
-group = 'com.osrsinvest'
+group = 'com.exchangeinsights'
 version = '1.0.0'
 
 tasks.withType(JavaCompile).configureEach {
