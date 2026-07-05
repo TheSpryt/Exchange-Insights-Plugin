@@ -33,7 +33,7 @@ In RuneLite → plugin settings:
 
 | Setting | Default | Notes |
 |---|---|---|
-| **Dashboard URL** | — | e.g. `https://osrs-invest.you.workers.dev` |
+| **Dashboard URL** | — | e.g. `https://exchange-insights.you.workers.dev` |
 | **Plugin token** | — | must equal the `PLUGIN_TOKEN` secret on your service |
 | **Send GE fills** | on | the core feature |
 | **Send GE offer book** | off | also forward placed/cancelled offer states |

@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2026, OSRS Invest — BSD 2-Clause License (see LICENSE).
+ * Copyright (c) 2026, Exchange Insights — BSD 2-Clause License (see LICENSE).
  */
-package com.osrsinvest;
+package com.exchangeinsights;
 
 import com.google.inject.Provides;
 import java.time.Instant;
@@ -28,11 +28,11 @@ import net.runelite.client.plugins.PluginDescriptor;
 
 @Slf4j
 @PluginDescriptor(
-	name = "OSRS Invest",
-	description = "Streams your GE fills (and optional datamine) to your OSRS Invest dashboard.",
+	name = "Exchange Insights",
+	description = "Streams your GE fills (and optional datamine) to your Exchange Insights dashboard.",
 	tags = {"ge", "grand exchange", "flipping", "prices", "investing", "economy"}
 )
-public class OsrsInvestPlugin extends Plugin
+public class ExchangeInsightsPlugin extends Plugin
 {
 	private static final int GE_SLOTS = 8;
 
@@ -61,7 +61,7 @@ public class OsrsInvestPlugin extends Plugin
 	private ConfigManager configManager;
 
 	@Inject
-	private OsrsInvestConfig config;
+	private ExchangeInsightsConfig config;
 
 	@Inject
 	private ApiClient api;
@@ -70,16 +70,16 @@ public class OsrsInvestPlugin extends Plugin
 	private volatile boolean scanning = false;
 
 	@Provides
-	OsrsInvestConfig provideConfig(ConfigManager configManager)
+	ExchangeInsightsConfig provideConfig(ConfigManager configManager)
 	{
-		return configManager.getConfig(OsrsInvestConfig.class);
+		return configManager.getConfig(ExchangeInsightsConfig.class);
 	}
 
 	@Override
 	protected void startUp()
 	{
 		fillTracker.reset();
-		log.debug("OSRS Invest started (configured={})", api.isConfigured());
+		log.debug("Exchange Insights started (configured={})", api.isConfigured());
 	}
 
 	@Override
@@ -166,7 +166,7 @@ public class OsrsInvestPlugin extends Plugin
 			return;
 		}
 		scanning = true;
-		log.debug("OSRS Invest: cache revision {} — starting datamine scan", revision);
+		log.debug("Exchange Insights: cache revision {} — starting datamine scan", revision);
 		scanChunk(0, new ArrayList<>(), 0, revision);
 	}
 
@@ -215,7 +215,7 @@ public class OsrsInvestPlugin extends Plugin
 				flushDatamine(acc);
 				setLastScanRevision(revision);
 				scanning = false;
-				log.debug("OSRS Invest: datamine scan complete — {} tradeable items reported", acc.size());
+				log.debug("Exchange Insights: datamine scan complete — {} tradeable items reported", acc.size());
 			}
 			else
 			{
@@ -234,7 +234,7 @@ public class OsrsInvestPlugin extends Plugin
 
 	private int getLastScanRevision()
 	{
-		final String v = configManager.getConfiguration(OsrsInvestConfig.GROUP, KEY_LAST_REVISION);
+		final String v = configManager.getConfiguration(ExchangeInsightsConfig.GROUP, KEY_LAST_REVISION);
 		if (v == null)
 		{
 			return Integer.MIN_VALUE;
@@ -251,6 +251,6 @@ public class OsrsInvestPlugin extends Plugin
 
 	private void setLastScanRevision(int revision)
 	{
-		configManager.setConfiguration(OsrsInvestConfig.GROUP, KEY_LAST_REVISION, Integer.toString(revision));
+		configManager.setConfiguration(ExchangeInsightsConfig.GROUP, KEY_LAST_REVISION, Integer.toString(revision));
 	}
 }

@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2026, OSRS Invest — BSD 2-Clause License (see LICENSE).
+ * Copyright (c) 2026, Exchange Insights — BSD 2-Clause License (see LICENSE).
  */
-package com.osrsinvest;
+package com.exchangeinsights;
 
 import java.util.Arrays;
 

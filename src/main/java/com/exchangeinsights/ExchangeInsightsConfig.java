@@ -1,17 +1,17 @@
 /*
- * Copyright (c) 2026, OSRS Invest — BSD 2-Clause License (see LICENSE).
+ * Copyright (c) 2026, Exchange Insights — BSD 2-Clause License (see LICENSE).
  */
-package com.osrsinvest;
+package com.exchangeinsights;
 
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
 
-@ConfigGroup(OsrsInvestConfig.GROUP)
-public interface OsrsInvestConfig extends Config
+@ConfigGroup(ExchangeInsightsConfig.GROUP)
+public interface ExchangeInsightsConfig extends Config
 {
-	String GROUP = "osrsinvest";
+	String GROUP = "exchangeinsights";
 
 	@ConfigSection(
 		name = "Connection",
@@ -30,7 +30,7 @@ public interface OsrsInvestConfig extends Config
 	@ConfigItem(
 		keyName = "baseUrl",
 		name = "Dashboard URL",
-		description = "Base URL of your OSRS Invest service, e.g. https://osrs-invest.you.workers.dev (no trailing slash needed).",
+		description = "Base URL of your Exchange Insights service, e.g. https://exchange-insights.you.workers.dev (no trailing slash needed).",
 		section = connectionSection,
 		position = 0
 	)
