@@ -169,6 +169,27 @@ public class ExchangeInsightsPlugin extends Plugin
 	private Widget geLinkButton;
 	private volatile int geLinkItemId = -1;
 
+	// Offer-info memo: the block is rebuilt (string formatting, regex tag-strip,
+	// font measurement) only when an input actually changed; per tick the work is
+	// a handful of reads and equality checks. The widget writes themselves were
+	// always change-guarded - this trims the redundant recomputation feeding them.
+	private GeQuote lastInjQuote;
+	private int lastInjPrice = -1;
+	private boolean lastInjSell;
+	private int lastInjTraded = -1;
+	private Integer lastInjLimit;
+	private String lastInjDesired;
+	private int lastInjFeeLineIdx = -1;
+	private int lastInjFeeLineWidth;
+
+	// Slot-title memo: cached verdict strings and found title widgets, so the
+	// steady state does no string building and no child-array walking (those
+	// getters copy arrays per call).
+	private final Long[] lastSlotGap = new Long[8];
+	private final boolean[] lastSlotBuy = new boolean[8];
+	private final String[] lastSlotDesired = new String[8];
+	private final Widget[] slotTitleWidgets = new Widget[8];
+
 	@Provides
 	ExchangeInsightsConfig provideConfig(ConfigManager configManager)
 	{
@@ -552,6 +573,12 @@ public class ExchangeInsightsPlugin extends Plugin
 		{
 			return;
 		}
+		// Titles only exist while the offers index is on screen.
+		final Widget index = client.getWidget(InterfaceID.GeOffers.INDEX);
+		if (index == null || index.isHidden())
+		{
+			return;
+		}
 		final GrandExchangeOffer[] offers = client.getGrandExchangeOffers();
 		if (offers == null)
 		{
@@ -562,6 +589,9 @@ public class ExchangeInsightsPlugin extends Plugin
 			final Long gap = offerGap(offers[i]);
 			if (gap == null)
 			{
+				lastSlotGap[i] = null;
+				lastSlotDesired[i] = null;
+				slotTitleWidgets[i] = null;
 				continue;
 			}
 			final Widget slot = client.getWidget(InterfaceID.GeOffers.INDEX_0 + i);
@@ -571,23 +601,36 @@ public class ExchangeInsightsPlugin extends Plugin
 			}
 			final boolean buy = offers[i].getState() == GrandExchangeOfferState.BUYING;
 			final String base = buy ? "Buy" : "Sell";
-			final Widget title = findSlotTitle(slot, base);
-			if (title == null)
+			// Rebuild the verdict string only when the gap or side moved.
+			if (lastSlotDesired[i] == null || !gap.equals(lastSlotGap[i]) || buy != lastSlotBuy[i])
 			{
-				continue;
+				lastSlotGap[i] = gap;
+				lastSlotBuy[i] = buy;
+				// Sign is the raw price delta vs the market; colour carries the verdict
+				// (a +N sell is red: asking N over what sells). Exactly 0 = at market
+				// but queued behind same-price offers, so it gets its own amber state.
+				final int cls = classifyAge(buy, gap);
+				final String col = cls > 0 ? COL_UP : cls < 0 ? COL_DOWN : COL_WARN;
+				final int clamped = (int) Math.min(Integer.MAX_VALUE, Math.abs(gap));
+				final String amount = gap == 0 ? "at market"
+					: (gap > 0 ? "+" : "-") + net.runelite.client.util.QuantityFormatter.quantityToRSDecimalStack(clamped, true);
+				lastSlotDesired[i] = base + " <col=" + col + ">" + amount + "</col>";
 			}
-			// Sign is the raw price delta vs the market; colour carries the verdict
-			// (a +N sell is red: asking N over what sells). Exactly 0 = at market
-			// but queued behind same-price offers, so it gets its own amber state.
-			final int cls = classifyAge(buy, gap);
-			final String col = cls > 0 ? COL_UP : cls < 0 ? COL_DOWN : COL_WARN;
-			final int clamped = (int) Math.min(Integer.MAX_VALUE, Math.abs(gap));
-			final String amount = gap == 0 ? "at market"
-				: (gap > 0 ? "+" : "-") + net.runelite.client.util.QuantityFormatter.quantityToRSDecimalStack(clamped, true);
-			final String desired = base + " <col=" + col + ">" + amount + "</col>";
-			if (!desired.equals(title.getText()))
+			// Reuse the found title widget while it still looks like this slot's
+			// title (the child getters copy arrays, so re-walking every tick is
+			// the expensive part); an interface rebuild fails the check and
+			// triggers one fresh walk.
+			Widget title = slotTitleWidgets[i];
+			String current = title != null ? title.getText() : null;
+			if (current == null || !(current.equals(base) || current.startsWith(base + " ")))
 			{
-				title.setText(desired);
+				title = findSlotTitle(slot, base);
+				slotTitleWidgets[i] = title;
+				current = title != null ? title.getText() : null;
+			}
+			if (title != null && !lastSlotDesired[i].equals(current))
+			{
+				title.setText(lastSlotDesired[i]);
 			}
 		}
 	}
@@ -913,12 +956,40 @@ public class ExchangeInsightsPlugin extends Plugin
 				geLimit = stats.getGeLimit();
 			}
 		}
-		final String desired = buildGeInfoText(q, offerPrice, sellOffer, activelyTraded, geLimit);
-		if (!desired.equals(text))
+		// Rebuild only when an input moved; a quote refresh is a new GeQuote object,
+		// so reference comparison catches it.
+		if (lastInjDesired == null || q != lastInjQuote || offerPrice != lastInjPrice || sellOffer != lastInjSell
+			|| activelyTraded != lastInjTraded || !java.util.Objects.equals(geLimit, lastInjLimit))
 		{
-			desc.setText(desired);
+			lastInjQuote = q;
+			lastInjPrice = offerPrice;
+			lastInjSell = sellOffer;
+			lastInjTraded = activelyTraded;
+			lastInjLimit = geLimit;
+			lastInjDesired = buildGeInfoText(q, offerPrice, sellOffer, activelyTraded, geLimit);
+			// Cache the fee icon's anchor metrics (tag-strip + font measurement)
+			// alongside the text they belong to.
+			lastInjFeeLineIdx = -1;
+			final String[] lines = lastInjDesired.split("<br>");
+			for (int i = 0; i < lines.length; i++)
+			{
+				if (lines[i].contains("after tax"))
+				{
+					lastInjFeeLineIdx = i;
+					final String plain = lines[i].replaceAll("<[^>]*>", "");
+					final net.runelite.api.FontTypeFace font = desc.getFont();
+					lastInjFeeLineWidth = font != null ? font.getTextWidth(plain) : plain.length() * 6;
+					break;
+				}
+			}
 		}
-		positionFeeIcon(desc, feeComponentId, desired);
+		// The game rewrites this text on interface rebuilds, so the widget read +
+		// equality check must stay per-tick; the write only fires on a change.
+		if (!lastInjDesired.equals(text))
+		{
+			desc.setText(lastInjDesired);
+		}
+		positionFeeIcon(desc, feeComponentId);
 	}
 
 	/**
@@ -929,24 +1000,16 @@ public class ExchangeInsightsPlugin extends Plugin
 	 * they share a coordinate space; the game re-creates the icon at its scripted
 	 * spot on each new offer, so this re-runs every tick (no-op once placed).
 	 */
-	private void positionFeeIcon(Widget desc, int feeComponentId, String text)
+	private void positionFeeIcon(Widget desc, int feeComponentId)
 	{
 		final Widget fee = client.getWidget(feeComponentId);
 		if (fee == null)
 		{
 			return;
 		}
-		final String[] lines = text.split("<br>");
-		int lineIdx = -1;
-		for (int i = 0; i < lines.length; i++)
-		{
-			if (lines[i].contains("after tax"))
-			{
-				lineIdx = i;
-				break;
-			}
-		}
-		if (lineIdx < 0)
+		// Anchor metrics (line index + measured text width) are cached by
+		// injectInfo when the block is rebuilt - nothing to recompute here.
+		if (lastInjFeeLineIdx < 0)
 		{
 			// No tax note to annotate (e.g. one-sided market) - don't leave it floating.
 			if (!fee.isHidden())
@@ -955,14 +1018,12 @@ public class ExchangeInsightsPlugin extends Plugin
 			}
 			return;
 		}
-		final String plain = lines[lineIdx].replaceAll("<[^>]*>", "");
-		final net.runelite.api.FontTypeFace font = desc.getFont();
 		int lineHeight = desc.getLineHeight();
 		if (lineHeight <= 0)
 		{
+			final net.runelite.api.FontTypeFace font = desc.getFont();
 			lineHeight = font != null ? font.getBaseline() : 13;
 		}
-		final int textWidth = font != null ? font.getTextWidth(plain) : plain.length() * 6;
 		if (fee.isHidden())
 		{
 			fee.setHidden(false);
@@ -978,14 +1039,13 @@ public class ExchangeInsightsPlugin extends Plugin
 		{
 			return; // not laid out yet; try again next tick
 		}
-		log.debug("fee icon: desc={} fee={} lineIdx={} lh={} fontId={} textW={}", db, fb, lineIdx, lineHeight, desc.getFontId(), textWidth);
 		// The fee widget is an oversized (~40x40) click box with the small (i)
 		// sprite drawn CENTRED inside it - align the box's centre to the text, not
 		// its corner: sprite centre = a half-glyph past the text end, on the
 		// line's vertical midline.
 		final int spriteHalf = 8;
-		final int centerX = db.x + textWidth + 4 + spriteHalf;
-		final int centerY = db.y + lineIdx * lineHeight + lineHeight / 2;
+		final int centerX = db.x + lastInjFeeLineWidth + 4 + spriteHalf;
+		final int centerY = db.y + lastInjFeeLineIdx * lineHeight + lineHeight / 2;
 		final int targetX = Math.min(centerX - fb.width / 2, db.x + db.width - fb.width / 2 - spriteHalf);
 		final int targetY = centerY - fb.height / 2;
 		final int dx = targetX - fb.x;

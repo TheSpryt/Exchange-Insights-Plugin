@@ -67,13 +67,13 @@ public interface ExchangeInsightsConfig extends Config
 	@ConfigItem(
 		keyName = "sendOffers",
 		name = "Send GE offer book",
-		description = "Also forward live offer state changes (placed/cancelled), not just completed fills. Off by default.",
+		description = "Also forward live offer state changes (placed/cancelled), not just completed fills.",
 		section = streamsSection,
 		position = 1
 	)
 	default boolean sendOffers()
 	{
-		return false;
+		return true;
 	}
 
 	@ConfigItem(
@@ -85,7 +85,7 @@ public interface ExchangeInsightsConfig extends Config
 	)
 	default boolean datamineNewItems()
 	{
-		return false;
+		return true;
 	}
 
 	@ConfigItem(
