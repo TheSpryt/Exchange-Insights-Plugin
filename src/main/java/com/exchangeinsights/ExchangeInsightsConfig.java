@@ -27,6 +27,13 @@ public interface ExchangeInsightsConfig extends Config
 	)
 	String streamsSection = "streams";
 
+	@ConfigSection(
+		name = "Premium",
+		description = "Features for Premium accounts (no effect on free accounts).",
+		position = 2
+	)
+	String premiumSection = "premium";
+
 	@ConfigItem(
 		keyName = "baseUrl",
 		name = "Dashboard URL",
@@ -89,49 +96,13 @@ public interface ExchangeInsightsConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "inGameAlerts",
-		name = "In-game alerts",
-		description = "Deliver your watchlist alerts (RuneLite channel) in game. Each alert also appears as an infobox you can right-click to Clear or Open in your browser.",
-		section = streamsSection,
-		position = 3
-	)
-	default boolean inGameAlerts()
-	{
-		return true;
-	}
-
-	@ConfigItem(
-		keyName = "alertDelivery",
-		name = "Alert delivery method",
-		description = "How in-game alerts are announced: a game chat message, a system notification, or both.",
-		section = streamsSection,
-		position = 4
-	)
-	default AlertDelivery alertDelivery()
-	{
-		return AlertDelivery.BOTH;
-	}
-
-	@ConfigItem(
 		keyName = "geOverlay",
 		name = "GE offer info",
 		description = "Add live insta-buy/insta-sell, after-tax item margin and buy limit to the item text in the Grand Exchange offer window. Reads public market data only - works without an account.",
 		section = streamsSection,
-		position = 5
+		position = 3
 	)
 	default boolean geOverlay()
-	{
-		return true;
-	}
-
-	@ConfigItem(
-		keyName = "showFlipMargin",
-		name = "Premium: show quant flip margins",
-		description = "If your account is Premium, show the Flip Finder's quant-computed flip margin in the GE offer info instead of the plain item margin, and link the info icon to the item's flips (not margins). No effect on free accounts.",
-		section = streamsSection,
-		position = 6
-	)
-	default boolean showFlipMargin()
 	{
 		return true;
 	}
@@ -141,7 +112,7 @@ public interface ExchangeInsightsConfig extends Config
 		name = "Offer age badges",
 		description = "On the GE offers screen, badge each active slot with whether your price is still ahead of the market (green) or the market has moved past it (red, with how far behind). Public market data only.",
 		section = streamsSection,
-		position = 7
+		position = 4
 	)
 	default boolean geSlotBadges()
 	{
@@ -153,10 +124,46 @@ public interface ExchangeInsightsConfig extends Config
 		name = "Left-click Collect to bank",
 		description = "Make the Grand Exchange Collect button send everything to your bank on left click. Collect to inventory stays available on right-click.",
 		section = streamsSection,
-		position = 8
+		position = 5
 	)
 	default boolean leftClickCollectToBank()
 	{
 		return false;
+	}
+
+	@ConfigItem(
+		keyName = "inGameAlerts",
+		name = "In-game alerts",
+		description = "Deliver your watchlist alerts (a Premium feature) in game. Each alert also appears as an infobox you can right-click to Clear or Open in your browser.",
+		section = premiumSection,
+		position = 0
+	)
+	default boolean inGameAlerts()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "alertDelivery",
+		name = "Alert delivery method",
+		description = "How in-game alerts are announced: a game chat message, a system notification, or both.",
+		section = premiumSection,
+		position = 1
+	)
+	default AlertDelivery alertDelivery()
+	{
+		return AlertDelivery.BOTH;
+	}
+
+	@ConfigItem(
+		keyName = "showFlipMargin",
+		name = "Show quant flip margins",
+		description = "Show the Flip Finder's quant-computed flip margin in the GE offer info instead of the plain item margin, and link the info icon to the item's flips (not margins). Premium accounts only.",
+		section = premiumSection,
+		position = 2
+	)
+	default boolean showFlipMargin()
+	{
+		return true;
 	}
 }
