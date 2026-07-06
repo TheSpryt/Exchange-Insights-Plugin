@@ -558,7 +558,7 @@ public class ExchangeInsightsPlugin extends Plugin
 			final int cls = classifyAge(buy, gap);
 			final String col = cls > 0 ? COL_UP : cls < 0 ? COL_DOWN : COL_WARN;
 			final int clamped = (int) Math.min(Integer.MAX_VALUE, Math.abs(gap));
-			final String amount = gap == 0 ? "at mkt"
+			final String amount = gap == 0 ? "at market"
 				: (gap > 0 ? "+" : "-") + net.runelite.client.util.QuantityFormatter.quantityToRSDecimalStack(clamped, true);
 			final String desired = base + " <col=" + col + ">" + amount + "</col>";
 			if (!desired.equals(title.getText()))
