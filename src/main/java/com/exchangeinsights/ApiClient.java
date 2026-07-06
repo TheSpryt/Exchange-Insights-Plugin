@@ -6,6 +6,7 @@ package com.exchangeinsights;
 import com.google.gson.Gson;
 import java.io.IOException;
 import java.util.List;
+import java.util.function.Consumer;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +28,7 @@ import okhttp3.Response;
 class ApiClient
 {
 	private static final MediaType JSON = MediaType.get("application/json");
-	private static final String SOURCE = "exchange-insights-plugin/1.0.0";
+	private static final String SOURCE = "exchange-insights-plugin/1.1.0";
 
 	private final OkHttpClient http;
 	private final Gson gson;
@@ -131,6 +132,36 @@ class ApiClient
 		}
 	}
 
+	/** The character this client is logged into. Attaches the character (and its
+	 *  alts) to the token's owner on the dashboard. accountHash is sent as a string:
+	 *  it's a 64-bit value, and JSON numbers lose precision past 2^53. */
+	private static final class IdentityPayload
+	{
+		final String accountHash;
+		final String rsn;
+		final String source = SOURCE;
+
+		IdentityPayload(String accountHash, String rsn)
+		{
+			this.accountHash = accountHash;
+			this.rsn = rsn;
+		}
+	}
+
+	/** A pending watchlist alert routed to the RuneLite channel. */
+	static final class Alert
+	{
+		long id;
+		String title;
+		String body;
+		String link;
+	}
+
+	private static final class AlertsResponse
+	{
+		List<Alert> alerts;
+	}
+
 	boolean isConfigured()
 	{
 		return !config.baseUrl().trim().isEmpty() && !config.token().trim().isEmpty();
@@ -157,6 +188,78 @@ class ApiClient
 		if (!items.isEmpty())
 		{
 			post("/api/plugin/datamine", new DataminePayload(items));
+		}
+	}
+
+	void sendIdentity(long accountHash, String rsn)
+	{
+		post("/api/plugin/identity", new IdentityPayload(Long.toString(accountHash), rsn));
+	}
+
+	/**
+	 * Poll pending in-game alerts. The server stamps each returned alert delivered,
+	 * so every alert is handed out exactly once; the callback runs on the HTTP
+	 * dispatcher thread and is only invoked when there is at least one alert.
+	 */
+	void fetchAlerts(Consumer<List<Alert>> onAlerts)
+	{
+		if (!isConfigured())
+		{
+			return;
+		}
+		final Request request = buildRequest("/api/plugin/alerts");
+		if (request == null)
+		{
+			return;
+		}
+		http.newCall(request).enqueue(new Callback()
+		{
+			@Override
+			public void onFailure(Call call, IOException e)
+			{
+				log.debug("Exchange Insights: alerts poll failed", e);
+			}
+
+			@Override
+			public void onResponse(Call call, Response response)
+			{
+				try (Response r = response)
+				{
+					if (!r.isSuccessful() || r.body() == null)
+					{
+						log.debug("Exchange Insights: alerts poll returned {}", r.code());
+						return;
+					}
+					final AlertsResponse parsed = gson.fromJson(r.body().charStream(), AlertsResponse.class);
+					if (parsed != null && parsed.alerts != null && !parsed.alerts.isEmpty())
+					{
+						onAlerts.accept(parsed.alerts);
+					}
+				}
+				catch (Exception ex)
+				{
+					log.debug("Exchange Insights: alerts poll parse failed", ex);
+				}
+			}
+		});
+	}
+
+	/** Build an authenticated GET request, or null when the URL is malformed. */
+	private Request buildRequest(String path)
+	{
+		final String base = config.baseUrl().trim().replaceAll("/+$", "");
+		try
+		{
+			return new Request.Builder()
+				.url(base + path)
+				.addHeader("Authorization", "Bearer " + config.token().trim())
+				.addHeader("User-Agent", SOURCE)
+				.build();
+		}
+		catch (IllegalArgumentException ex)
+		{
+			log.warn("Exchange Insights: bad dashboard URL '{}'", base, ex);
+			return null;
 		}
 	}
 

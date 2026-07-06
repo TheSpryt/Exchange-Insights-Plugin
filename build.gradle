@@ -33,7 +33,7 @@ dependencies {
 }
 
 group = 'com.exchangeinsights'
-version = '1.0.0'
+version = '1.1.0'
 
 tasks.withType(JavaCompile).configureEach {
 	options.encoding = 'UTF-8'

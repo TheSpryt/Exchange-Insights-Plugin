@@ -1,18 +1,25 @@
 # Exchange Insights — RuneLite plugin
 
-The companion plugin for the [Exchange Insights](../README.md) dashboard. It streams
-data only a logged-in client can see to your service's ingest API
-([`docs/PLUGIN-INGEST.md`](../docs/PLUGIN-INGEST.md)):
+The companion plugin for the [Exchange Insights](https://exchange-insights.gg)
+dashboard. It streams data only a logged-in client can see to the dashboard's
+ingest API ([API reference](https://github.com/TheSpryt/OSRS-Invest/blob/main/docs/PLUGIN-INGEST.md)):
 
 - **GE fills** — every buy/sell you complete, so the dashboard can score
   **realized vs modeled** flip P&L (does the Flip Finder's spread actually get
   captured?).
+- **Identity** — the character you're logged into (stable account hash + RSN),
+  sent once per login so the dashboard links your OSRS account (and alts)
+  automatically.
 - **GE offer book** *(optional)* — live offer state changes.
 - **Datamine** *(optional)* — a full scan of the item id space, run only when the
   game **cache revision changes** (≈ after an update) and chunked across ticks so
   it never hitches. It fingerprints each tradeable item and lets the server detect
   what's new or changed — and which tradeable items the wiki doesn't have yet
   (pre-wiki finds).
+
+It also delivers **in-game alerts**: watchlist alerts with the RuneLite channel
+selected are polled every 30 seconds while you're logged in and shown as a game
+chat message plus a system notification.
 
 ## How fills are captured (and why they're accurate)
 
@@ -33,13 +40,16 @@ In RuneLite → plugin settings:
 
 | Setting | Default | Notes |
 |---|---|---|
-| **Dashboard URL** | — | e.g. `https://exchange-insights.you.workers.dev` |
-| **Plugin token** | — | must equal the `PLUGIN_TOKEN` secret on your service |
+| **Dashboard URL** | `https://exchange-insights.gg` | change only if you self-host |
+| **Plugin token** | — | your personal token, generated on the dashboard under **Account settings** |
 | **Send GE fills** | on | the core feature |
 | **Send GE offer book** | off | also forward placed/cancelled offer states |
 | **Datamine new items** | off | bounded forward scan of item ids on login |
+| **In-game alerts** | on | watchlist alerts (RuneLite channel) as chat + notification |
 
-Nothing is sent until both the URL and token are set.
+Nothing is sent until both the URL and token are set. The token is per-user and
+revocable from the same account page; it attributes everything this plugin sends
+to your account.
 
 ## Building
 
