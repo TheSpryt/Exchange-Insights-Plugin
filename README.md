@@ -21,6 +21,26 @@ It also delivers **in-game alerts**: watchlist alerts with the RuneLite channel
 selected are polled every 30 seconds while you're logged in and shown as a game
 chat message plus a system notification.
 
+## Works without an account
+
+The **GE offer info** needs no account, token, or setup: while you're setting up
+a Grand Exchange offer, the item's description text in the offer window gains
+live insta-buy/insta-sell prices, the after-tax item margin with ROI, and the
+buy limit — read from Exchange Insights' public market data (download-only;
+nothing about you or your account is sent). It lives in the same text block the
+game writes "Actively traded price" into, so it reads as native UI; the flavour
+examine text is swapped out to make room (the box is fixed-height). ("Item
+margin" is the plain quote spread, as on the site's Item margins board — the
+quant-adjusted Flip Finder economics stay a dashboard feature.)
+
+## One-click account linking
+
+To unlock the two-way features (fill tracking, alerts, flip P&L), press
+**Link account…** in the sidebar panel while logged into OSRS. Your browser opens
+the dashboard, you approve the link, and the plugin picks up its token
+automatically — nothing to copy. (You can still paste a token manually in the
+plugin settings; generate one under **Account settings** on the dashboard.)
+
 ## How fills are captured (and why they're accurate)
 
 `FillTracker` tracks each GE slot's cumulative `quantitySold` and emits only the
@@ -46,10 +66,11 @@ In RuneLite → plugin settings:
 | **Send GE offer book** | off | also forward placed/cancelled offer states |
 | **Datamine new items** | off | bounded forward scan of item ids on login |
 | **In-game alerts** | on | watchlist alerts (RuneLite channel) as chat + notification |
+| **GE offer info** | on | live prices + margin in the offer window text; no account needed |
 
-Nothing is sent until both the URL and token are set. The token is per-user and
-revocable from the same account page; it attributes everything this plugin sends
-to your account.
+Nothing about your account or activity is sent until a token is set (the GE
+overlay only *downloads* public prices). The token is per-user and revocable from
+the account page; it attributes everything this plugin sends to your account.
 
 ## Building
 
