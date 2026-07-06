@@ -126,8 +126,8 @@ public interface ExchangeInsightsConfig extends Config
 
 	@ConfigItem(
 		keyName = "showFlipMargin",
-		name = "Premium: show flip margins",
-		description = "If your account is Premium, show the Flip Finder's quant-adjusted flip margin in the GE offer info instead of the plain item margin. No effect on free accounts.",
+		name = "Premium: show quant flip margins",
+		description = "If your account is Premium, show the Flip Finder's quant-computed flip margin in the GE offer info instead of the plain item margin, and link the info icon to the item's flips (not margins). No effect on free accounts.",
 		section = streamsSection,
 		position = 6
 	)
