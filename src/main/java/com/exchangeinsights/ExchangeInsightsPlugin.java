@@ -471,9 +471,10 @@ public class ExchangeInsightsPlugin extends Plugin
 	}
 
 	/**
-	 * How an active offer has aged: the signed per-item gp gap to the price that
-	 * fills right now. Positive = still ahead of the market (bid at/over
-	 * insta-buy, ask at/under insta-sell), negative = the market moved past it.
+	 * How an active offer sits vs the market: the signed per-item price DELTA
+	 * (your price minus the fill-relevant insta price). A sell 13.7M over
+	 * insta-sell reads +13.7M; a bid 2M under insta-buy reads -2M. Whether that
+	 * delta is good or bad depends on the side - see {@link #classifyAge}.
 	 * Null when the offer isn't active or the quote isn't in yet.
 	 */
 	Long offerGap(GrandExchangeOffer o)
@@ -494,9 +495,24 @@ public class ExchangeInsightsPlugin extends Plugin
 		}
 		if (st == GrandExchangeOfferState.SELLING)
 		{
-			return q.low == null ? null : q.low - o.getPrice();
+			return q.low == null ? null : (long) o.getPrice() - q.low;
 		}
 		return null;
+	}
+
+	/** +1 = ahead of the market (fills first), 0 = exactly AT market (queued
+	 *  behind same-price offers - not actually filling), -1 = market moved past. */
+	static int classifyAge(boolean buy, long delta)
+	{
+		if (delta == 0)
+		{
+			return 0;
+		}
+		if (buy)
+		{
+			return delta > 0 ? 1 : -1;
+		}
+		return delta < 0 ? 1 : -1;
 	}
 
 	/**
@@ -536,10 +552,15 @@ public class ExchangeInsightsPlugin extends Plugin
 			{
 				continue;
 			}
-			final String col = gap >= 0 ? COL_UP : COL_DOWN;
+			// Sign is the raw price delta vs the market; colour carries the verdict
+			// (a +N sell is red: asking N over what sells). Exactly 0 = at market
+			// but queued behind same-price offers, so it gets its own amber state.
+			final int cls = classifyAge(buy, gap);
+			final String col = cls > 0 ? COL_UP : cls < 0 ? COL_DOWN : COL_WARN;
 			final int clamped = (int) Math.min(Integer.MAX_VALUE, Math.abs(gap));
-			final String desired = base + " <col=" + col + ">" + (gap >= 0 ? "+" : "-")
-				+ net.runelite.client.util.QuantityFormatter.quantityToRSDecimalStack(clamped, true) + "</col>";
+			final String amount = gap == 0 ? "at mkt"
+				: (gap > 0 ? "+" : "-") + net.runelite.client.util.QuantityFormatter.quantityToRSDecimalStack(clamped, true);
+			final String desired = base + " <col=" + col + ">" + amount + "</col>";
 			if (!desired.equals(title.getText()))
 			{
 				title.setText(desired);
