@@ -10,6 +10,7 @@ import java.awt.Rectangle;
 import javax.inject.Inject;
 import net.runelite.api.Client;
 import net.runelite.api.GrandExchangeOffer;
+import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.ui.overlay.Overlay;
@@ -26,6 +27,7 @@ class ExchangeInsightsSlotOverlay extends Overlay
 {
 	private static final Color AHEAD = new Color(0x6c, 0xc0, 0x71);
 	private static final Color BEHIND = new Color(0xd4, 0x62, 0x62);
+	private static final Color AT_MARKET = new Color(0xe0, 0xc0, 0x55);
 
 	private final Client client;
 	private final ExchangeInsightsPlugin plugin;
@@ -71,7 +73,9 @@ class ExchangeInsightsSlotOverlay extends Overlay
 			{
 				continue;
 			}
-			g.setColor(gap >= 0 ? AHEAD : BEHIND);
+			final boolean buy = offers[i].getState() == GrandExchangeOfferState.BUYING;
+			final int cls = ExchangeInsightsPlugin.classifyAge(buy, gap);
+			g.setColor(cls > 0 ? AHEAD : cls < 0 ? BEHIND : AT_MARKET);
 			g.drawRect(b.x, b.y, b.width - 1, b.height - 1);
 		}
 		return null;
