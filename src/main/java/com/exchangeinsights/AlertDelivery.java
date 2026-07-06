@@ -4,8 +4,9 @@
 package com.exchangeinsights;
 
 /** How an in-game watchlist alert is announced. An actionable infobox (right-click
- *  Clear / Open in browser) is shown regardless; this only controls the announcement. */
-enum AlertDelivery
+ *  Clear / Open in browser) is shown regardless; this only controls the announcement.
+ *  MUST be public: RuneLite's config proxy (a different access context) reads it. */
+public enum AlertDelivery
 {
 	CHAT("Chat message"),
 	NOTIFICATION("System notification"),
@@ -24,12 +25,12 @@ enum AlertDelivery
 		return label;
 	}
 
-	boolean chat()
+	public boolean chat()
 	{
 		return this == CHAT || this == BOTH;
 	}
 
-	boolean notification()
+	public boolean notification()
 	{
 		return this == NOTIFICATION || this == BOTH;
 	}
