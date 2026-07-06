@@ -6,6 +6,7 @@ package com.exchangeinsights;
 import com.google.gson.Gson;
 import java.io.IOException;
 import java.util.List;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -162,9 +163,96 @@ class ApiClient
 		List<Alert> alerts;
 	}
 
+	/** Outcome of a connection test against /api/plugin/ping. */
+	enum PingStatus
+	{
+		OK,
+		UNAUTHORIZED,
+		ERROR,
+	}
+
+	private static final class PingResponse
+	{
+		boolean ok;
+		String handle;
+	}
+
+	/** A started device-link request: open verificationUrl, poll with deviceSecret. */
+	static final class LinkStart
+	{
+		String userCode;
+		String deviceSecret;
+		String verificationUrl;
+		long expiresAt;
+		int pollSeconds;
+	}
+
+	/** One poll of a device-link request; token is set exactly once on approval. */
+	static final class LinkPoll
+	{
+		String status; // pending | approved | denied | expired | invalid | claimed
+		String token;
+	}
+
+	private static final class LinkStartPayload
+	{
+		final String accountHash;
+		final String accountName;
+		final String source = SOURCE;
+
+		LinkStartPayload(String accountHash, String accountName)
+		{
+			this.accountHash = accountHash;
+			this.accountName = accountName;
+		}
+	}
+
+	private static final class LinkPollPayload
+	{
+		final String deviceSecret;
+
+		LinkPollPayload(String deviceSecret)
+		{
+			this.deviceSecret = deviceSecret;
+		}
+	}
+
+	/** Public live quote for one item (?econ=1 adds catalogue facts). No auth needed. */
+	static final class Quote
+	{
+		Price price;
+		Double margin; // per-unit after-tax flip margin, gp
+		Double roi; // fraction, 0.05 = +5%
+		Item item;
+
+		static final class Price
+		{
+			Long high; // instabuy
+			Long low; // instasell
+		}
+
+		static final class Item
+		{
+			String name;
+			Integer geLimit;
+		}
+	}
+
+	/** Fully configured for the authenticated streams (fills, identity, alerts). */
 	boolean isConfigured()
 	{
-		return !config.baseUrl().trim().isEmpty() && !config.token().trim().isEmpty();
+		return hasUrl() && !config.token().trim().isEmpty();
+	}
+
+	/** A dashboard URL is set - enough for the public reads (quote, device link). */
+	boolean hasUrl()
+	{
+		return !base().isEmpty();
+	}
+
+	private String base()
+	{
+		return config.baseUrl().trim().replaceAll("/+$", "");
 	}
 
 	void sendFills(List<Fill> fills)
@@ -194,6 +282,55 @@ class ApiClient
 	void sendIdentity(long accountHash, String rsn)
 	{
 		post("/api/plugin/identity", new IdentityPayload(Long.toString(accountHash), rsn));
+	}
+
+	/**
+	 * Test the configured URL + token against the dashboard's side-effect-free ping
+	 * endpoint. The callback runs on the HTTP dispatcher thread with the status and,
+	 * when connected, the account's public handle (may be null).
+	 */
+	void ping(BiConsumer<PingStatus, String> onResult)
+	{
+		final Request request = isConfigured() ? buildRequest("/api/plugin/ping") : null;
+		if (request == null)
+		{
+			onResult.accept(PingStatus.ERROR, null);
+			return;
+		}
+		http.newCall(request).enqueue(new Callback()
+		{
+			@Override
+			public void onFailure(Call call, IOException e)
+			{
+				log.debug("Exchange Insights: ping failed", e);
+				onResult.accept(PingStatus.ERROR, null);
+			}
+
+			@Override
+			public void onResponse(Call call, Response response)
+			{
+				try (Response r = response)
+				{
+					if (r.code() == 401 || r.code() == 403)
+					{
+						onResult.accept(PingStatus.UNAUTHORIZED, null);
+						return;
+					}
+					if (!r.isSuccessful() || r.body() == null)
+					{
+						onResult.accept(PingStatus.ERROR, null);
+						return;
+					}
+					final PingResponse parsed = gson.fromJson(r.body().charStream(), PingResponse.class);
+					onResult.accept(PingStatus.OK, parsed == null ? null : parsed.handle);
+				}
+				catch (Exception ex)
+				{
+					log.debug("Exchange Insights: ping parse failed", ex);
+					onResult.accept(PingStatus.ERROR, null);
+				}
+			}
+		});
 	}
 
 	/**
@@ -244,17 +381,26 @@ class ApiClient
 		});
 	}
 
-	/** Build an authenticated GET request, or null when the URL is malformed. */
-	private Request buildRequest(String path)
+	/** Request skeleton with the UA and, when a token is set, bearer auth. Null when
+	 *  the URL is missing/malformed. Public endpoints work fine without the token. */
+	private Request.Builder requestBuilder(String path)
 	{
-		final String base = config.baseUrl().trim().replaceAll("/+$", "");
+		final String base = base();
+		if (base.isEmpty())
+		{
+			return null;
+		}
 		try
 		{
-			return new Request.Builder()
+			final Request.Builder b = new Request.Builder()
 				.url(base + path)
-				.addHeader("Authorization", "Bearer " + config.token().trim())
-				.addHeader("User-Agent", SOURCE)
-				.build();
+				.addHeader("User-Agent", SOURCE);
+			final String token = config.token().trim();
+			if (!token.isEmpty())
+			{
+				b.addHeader("Authorization", "Bearer " + token);
+			}
+			return b;
 		}
 		catch (IllegalArgumentException ex)
 		{
@@ -263,28 +409,96 @@ class ApiClient
 		}
 	}
 
+	private Request buildRequest(String path)
+	{
+		final Request.Builder b = requestBuilder(path);
+		return b == null ? null : b.build();
+	}
+
+	/** Fire a request and hand the parsed JSON body (or null on any failure) to the
+	 *  callback, which runs on the HTTP dispatcher thread. */
+	private <T> void requestJson(Request request, Class<T> type, Consumer<T> onResult)
+	{
+		http.newCall(request).enqueue(new Callback()
+		{
+			@Override
+			public void onFailure(Call call, IOException e)
+			{
+				log.debug("Exchange Insights: {} failed", request.url().encodedPath(), e);
+				onResult.accept(null);
+			}
+
+			@Override
+			public void onResponse(Call call, Response response)
+			{
+				try (Response r = response)
+				{
+					if (!r.isSuccessful() || r.body() == null)
+					{
+						onResult.accept(null);
+						return;
+					}
+					onResult.accept(gson.fromJson(r.body().charStream(), type));
+				}
+				catch (Exception ex)
+				{
+					log.debug("Exchange Insights: {} parse failed", request.url().encodedPath(), ex);
+					onResult.accept(null);
+				}
+			}
+		});
+	}
+
+	/** Start a device link: the server mints a code pair; open verificationUrl in
+	 *  the browser and poll with the secret. Works without a token by design. */
+	void startLink(long accountHash, String rsn, Consumer<LinkStart> onResult)
+	{
+		final Request.Builder b = requestBuilder("/api/plugin/link/start");
+		if (b == null)
+		{
+			onResult.accept(null);
+			return;
+		}
+		final LinkStartPayload payload = new LinkStartPayload(Long.toString(accountHash), rsn);
+		requestJson(b.post(RequestBody.create(JSON, gson.toJson(payload))).build(), LinkStart.class, onResult);
+	}
+
+	/** One poll of a pending device link. */
+	void pollLink(String deviceSecret, Consumer<LinkPoll> onResult)
+	{
+		final Request.Builder b = requestBuilder("/api/plugin/link/poll");
+		if (b == null)
+		{
+			onResult.accept(null);
+			return;
+		}
+		requestJson(b.post(RequestBody.create(JSON, gson.toJson(new LinkPollPayload(deviceSecret)))).build(), LinkPoll.class, onResult);
+	}
+
+	/** Public live quote for the GE overlay - no account or token required. */
+	void fetchQuote(int itemId, Consumer<Quote> onResult)
+	{
+		final Request request = buildRequest("/api/items/" + itemId + "/quote?econ=1");
+		if (request == null)
+		{
+			onResult.accept(null);
+			return;
+		}
+		requestJson(request, Quote.class, onResult);
+	}
+
 	private void post(String path, Object body)
 	{
 		if (!isConfigured())
 		{
 			return;
 		}
-		final String base = config.baseUrl().trim().replaceAll("/+$", "");
-		final Request request;
-		try
+		final Request.Builder b = requestBuilder(path);
+		if (b == null)
 		{
-			request = new Request.Builder()
-				.url(base + path)
-				.addHeader("Authorization", "Bearer " + config.token().trim())
-				.addHeader("User-Agent", SOURCE)
-				.post(RequestBody.create(JSON, gson.toJson(body)))
-				.build();
-		}
-		catch (IllegalArgumentException ex)
-		{
-			log.warn("Exchange Insights: bad dashboard URL '{}'", base, ex);
 			return;
 		}
+		final Request request = b.post(RequestBody.create(JSON, gson.toJson(body))).build();
 
 		http.newCall(request).enqueue(new Callback()
 		{

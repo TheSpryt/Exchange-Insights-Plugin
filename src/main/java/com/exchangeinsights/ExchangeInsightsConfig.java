@@ -99,4 +99,28 @@ public interface ExchangeInsightsConfig extends Config
 	{
 		return true;
 	}
+
+	@ConfigItem(
+		keyName = "geOverlay",
+		name = "GE offer info",
+		description = "Add live insta-buy/insta-sell, after-tax item margin and buy limit to the item text in the Grand Exchange offer window. Reads public market data only - works without an account.",
+		section = streamsSection,
+		position = 4
+	)
+	default boolean geOverlay()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "geSlotBadges",
+		name = "Offer age badges",
+		description = "On the GE offers screen, badge each active slot with whether your price is still ahead of the market (green) or the market has moved past it (red, with how far behind). Public market data only.",
+		section = streamsSection,
+		position = 5
+	)
+	default boolean geSlotBadges()
+	{
+		return true;
+	}
 }
