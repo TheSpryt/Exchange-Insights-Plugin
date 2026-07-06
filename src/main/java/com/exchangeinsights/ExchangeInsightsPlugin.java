@@ -5,12 +5,15 @@ package com.exchangeinsights;
 
 import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
+import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
@@ -35,6 +38,7 @@ import net.runelite.client.Notifier;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -94,9 +98,15 @@ public class ExchangeInsightsPlugin extends Plugin
 	private InfoBoxManager infoBoxManager;
 
 	@Inject
+	private ScheduledExecutorService executor;
+
+	@Inject
 	private ApiClient api;
 
 	private volatile boolean scanning = false;
+
+	// Browser device-link flow: true while a link approval is pending.
+	private volatile boolean linking = false;
 
 	// Alert infoboxes (client-thread state): the boxes shown and a lookup from each
 	// box's right-click menu entry to its action (Clear / Open).
@@ -211,6 +221,7 @@ public class ExchangeInsightsPlugin extends Plugin
 	{
 		identityPending = false;
 		identitySentHash = -1;
+		linking = false;
 		geQuote = null;
 		currentGeItem = -1;
 		slotQuotes.clear();
@@ -243,6 +254,114 @@ public class ExchangeInsightsPlugin extends Plugin
 				}
 			}
 		});
+	}
+
+	/**
+	 * The "Link account in browser" config item acts as a button: ticking it kicks
+	 * off the device-link flow and immediately resets the tick. RuneLite config has
+	 * no real button, so this is the standard toggle-as-action pattern.
+	 */
+	@Subscribe
+	public void onConfigChanged(ConfigChanged event)
+	{
+		if (ExchangeInsightsConfig.GROUP.equals(event.getGroup())
+			&& "linkAccount".equals(event.getKey())
+			&& "true".equals(event.getNewValue()))
+		{
+			configManager.setConfiguration(ExchangeInsightsConfig.GROUP, "linkAccount", false);
+			startAccountLink();
+		}
+	}
+
+	/** Chat + notification status line for the link flow (there's no panel). */
+	private void linkStatus(String message)
+	{
+		notifier.notify("Exchange Insights: " + message);
+		clientThread.invokeLater(() ->
+			client.addChatMessage(ChatMessageType.CONSOLE, "", "<col=b8860b>[Exchange Insights]</col> " + message, null));
+	}
+
+	/**
+	 * One-click account link: mint a code pair on the dashboard, open the browser to
+	 * approve it, and poll until the token arrives - then store it in config, which
+	 * is all it takes to be linked. Status is reported in the game chat.
+	 */
+	private void startAccountLink()
+	{
+		if (linking)
+		{
+			return;
+		}
+		if (api.isConfigured())
+		{
+			linkStatus("Already linked - clear the Plugin token first if you want to re-link.");
+			return;
+		}
+		if (!api.hasUrl())
+		{
+			linkStatus("Set the Dashboard URL first, then tick Link account again.");
+			return;
+		}
+		if (client.getGameState() != GameState.LOGGED_IN || client.getAccountHash() == -1)
+		{
+			linkStatus("Log into OSRS first, then tick Link account - it ties this character to your account.");
+			return;
+		}
+		final long hash = client.getAccountHash();
+		final Player local = client.getLocalPlayer();
+		final String rsn = local == null ? null : local.getName();
+		linking = true;
+		linkStatus("Opening your browser - sign in and approve the link there…");
+		api.startLink(hash, rsn, start ->
+		{
+			if (start == null || start.deviceSecret == null || start.verificationUrl == null)
+			{
+				linking = false;
+				linkStatus("Couldn't reach the dashboard to start linking - check the URL and try again.");
+				return;
+			}
+			LinkBrowser.browse(start.verificationUrl);
+			scheduleLinkPoll(start.deviceSecret, start.expiresAt, Math.max(2, start.pollSeconds));
+		});
+	}
+
+	private void scheduleLinkPoll(String deviceSecret, long expiresAt, int intervalSeconds)
+	{
+		if (!linking)
+		{
+			return;
+		}
+		if (Instant.now().getEpochSecond() > expiresAt)
+		{
+			linking = false;
+			linkStatus("Link request expired - tick Link account to try again.");
+			return;
+		}
+		executor.schedule(() -> api.pollLink(deviceSecret, res ->
+		{
+			if (!linking)
+			{
+				return;
+			}
+			if (res == null || res.status == null || "pending".equals(res.status))
+			{
+				scheduleLinkPoll(deviceSecret, expiresAt, intervalSeconds);
+				return;
+			}
+			linking = false;
+			if ("approved".equals(res.status) && res.token != null && !res.token.isEmpty())
+			{
+				// Storing the token is all it takes to be linked.
+				configManager.setConfiguration(ExchangeInsightsConfig.GROUP, "token", res.token);
+				linkStatus("Linked! Your account is connected.");
+			}
+			else
+			{
+				linkStatus("denied".equals(res.status)
+					? "Link denied in the browser."
+					: "Link request expired or was already used - tick Link account to try again.");
+			}
+		}), intervalSeconds, TimeUnit.SECONDS);
 	}
 
 	/**
