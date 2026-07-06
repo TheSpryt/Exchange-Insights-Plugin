@@ -90,7 +90,7 @@ public interface ExchangeInsightsConfig extends Config
 
 	@ConfigItem(
 		keyName = "alertDelivery",
-		name = "Alert delivery",
+		name = "Alert delivery method",
 		description = "How in-game alerts are announced: a game chat message, a system notification, or both.",
 		section = streamsSection,
 		position = 4

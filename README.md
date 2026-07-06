@@ -33,26 +33,27 @@ examine text is swapped out to make room (the box is fixed-height). ("Item
 margin" is the plain quote spread, as on the site's Item margins board — the
 quant-adjusted Flip Finder economics stay a dashboard feature.)
 
-## One-click account linking
+## Linking your account
 
-To unlock the two-way features (fill tracking, alerts, flip P&L), press
-**Link account…** in the sidebar panel while logged into OSRS. Your browser opens
-the dashboard, you approve the link, and the plugin picks up its token
-automatically — nothing to copy. (You can still paste a token manually in the
-plugin settings; generate one under **Account settings** on the dashboard.)
+To unlock the two-way features (live offer board, trade history, alerts, flip
+margins), generate a **plugin token** on the dashboard under **Account settings**
+and paste it into the plugin's **Plugin token** setting in RuneLite. That's it —
+there's no separate panel; everything is configured in the plugin settings.
 
-## How fills are captured (and why they're accurate)
+## How trades are captured (and why they're accurate)
 
-`FillTracker` tracks each GE slot's cumulative `quantitySold` and emits only the
-**delta** since the last observation. The first time a slot is seen — including
-the offer snapshot the client re-broadcasts on login — only establishes a
-baseline, so historical fills are never replayed as new. A freshly placed offer
-fires its `BUYING`/`SELLING` event at quantity 0 first, so even an instant full
-fill is captured by the following increment. The server also dedupes identical
-fills, so retries and reconnects are harmless. (`FillTrackerTest` covers these.)
+The plugin pushes its **full 8-slot offer book** (every slot, including empty
+ones) to the dashboard on each offer change. Because each slot carries its
+cumulative filled quantity, the server derives fills by comparing the new
+quantity against the last one it stored for the same offer — the same
+delta-tracking idea, but driven by a full self-healing snapshot, so a dropped
+push is corrected by the next one and nothing is double-counted. First sight of
+an offer only sets a baseline, so progress made before tracking is never invented
+as a fill.
 
-Fills send the **listed price per item** (pre-tax); the dashboard applies GE tax
-itself, keeping realized margins apples-to-apples with the modeled ones.
+Prices are the **listed price per item** (pre-tax); the dashboard applies GE tax
+itself, keeping realized margins apples-to-apples with the modeled ones. On the
+dashboard, matched buy→sell round-trips become your verified trade history.
 
 ## Configuration
 
@@ -62,11 +63,14 @@ In RuneLite → plugin settings:
 |---|---|---|
 | **Dashboard URL** | `https://exchange-insights.gg` | change only if you self-host |
 | **Plugin token** | — | your personal token, generated on the dashboard under **Account settings** |
-| **Send GE fills** | on | the core feature |
-| **Send GE offer book** | off | also forward placed/cancelled offer states |
-| **Datamine new items** | off | bounded forward scan of item ids on login |
-| **In-game alerts** | on | watchlist alerts (RuneLite channel) as chat + notification |
+| **Sync GE offers & trades** | on | live offer board + verified trade history (needs a token) |
+| **Datamine new items** | on | bounded forward scan of item ids on login |
+| **In-game alerts** | on | watchlist alerts as a chat message and/or system notification |
+| **Alert delivery method** | Both | chat message, system notification, or both |
 | **GE offer info** | on | live prices + margin in the offer window text; no account needed |
+| **Premium: show flip margins** | on | premium accounts see the Flip Finder margin instead of the item margin |
+| **Offer age badges** | on | on the offers screen, flag each active slot vs the market |
+| **Left-click Collect to bank** | off | make the GE Collect button send to bank by default |
 
 Nothing about your account or activity is sent until a token is set (the GE
 overlay only *downloads* public prices). The token is per-user and revocable from
