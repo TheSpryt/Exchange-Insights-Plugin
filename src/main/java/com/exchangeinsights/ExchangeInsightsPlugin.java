@@ -8,6 +8,7 @@ import java.awt.image.BufferedImage;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -30,6 +31,7 @@ import net.runelite.api.events.GameTick;
 import net.runelite.api.events.GrandExchangeOfferChanged;
 import net.runelite.api.events.MenuEntryAdded;
 import net.runelite.api.gameval.InterfaceID;
+import net.runelite.client.events.OverlayMenuClicked;
 import net.runelite.api.widgets.JavaScriptCallback;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetType;
@@ -45,6 +47,7 @@ import net.runelite.client.task.Schedule;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.ui.overlay.OverlayManager;
+import net.runelite.client.ui.overlay.infobox.InfoBoxManager;
 import net.runelite.client.util.ImageUtil;
 import net.runelite.client.util.LinkBrowser;
 
@@ -98,6 +101,9 @@ public class ExchangeInsightsPlugin extends Plugin
 	private ExchangeInsightsSlotOverlay slotOverlay;
 
 	@Inject
+	private InfoBoxManager infoBoxManager;
+
+	@Inject
 	private ScheduledExecutorService executor;
 
 	@Inject
@@ -105,6 +111,12 @@ public class ExchangeInsightsPlugin extends Plugin
 
 	private final FillTracker fillTracker = new FillTracker(GE_SLOTS);
 	private volatile boolean scanning = false;
+
+	// Alert infoboxes (client-thread state): the boxes shown and a lookup from each
+	// box's right-click menu entry to its action (Clear / Open).
+	private BufferedImage alertIcon;
+	private final List<AlertInfoBox> alertBoxes = new ArrayList<>();
+	private final Map<Object, Runnable> alertBoxActions = new HashMap<>();
 
 	// Identity sync: which character this client is logged into, reported once per
 	// login (RSN isn't available the instant LOGGED_IN fires, so the send is armed
@@ -135,11 +147,13 @@ public class ExchangeInsightsPlugin extends Plugin
 		final String itemName;
 		final Long high;
 		final Long low;
-		final Double margin;
+		final Double margin; // plain item margin (spread after tax)
 		final Double roi;
 		final Integer geLimit;
+		final Double flipMargin; // premium: quant-adjusted flip net margin (null otherwise)
+		final Double flipRoi;
 
-		GeQuote(int itemId, String itemName, Long high, Long low, Double margin, Double roi, Integer geLimit)
+		GeQuote(int itemId, String itemName, Long high, Long low, Double margin, Double roi, Integer geLimit, Double flipMargin, Double flipRoi)
 		{
 			this.itemId = itemId;
 			this.itemName = itemName;
@@ -148,6 +162,8 @@ public class ExchangeInsightsPlugin extends Plugin
 			this.margin = margin;
 			this.roi = roi;
 			this.geLimit = geLimit;
+			this.flipMargin = flipMargin;
+			this.flipRoi = flipRoi;
 		}
 	}
 
@@ -207,6 +223,7 @@ public class ExchangeInsightsPlugin extends Plugin
 
 		panel = new ExchangeInsightsPanel(this::testConnection, this::startAccountLink);
 		final BufferedImage icon = ImageUtil.loadImageResource(ExchangeInsightsPlugin.class, "panel_icon.png");
+		alertIcon = icon;
 		clientThread.invoke(() -> client.getSpriteOverrides().put(EI_SPRITE_ID, ImageUtil.getImageSpritePixels(icon, client)));
 		navButton = NavigationButton.builder()
 			.tooltip("Exchange Insights")
@@ -232,6 +249,15 @@ public class ExchangeInsightsPlugin extends Plugin
 		currentGeItem = -1;
 		slotQuotes.clear();
 		slotQuoteFetchedAt.clear();
+		clientThread.invoke(() ->
+		{
+			for (final AlertInfoBox box : new ArrayList<>(alertBoxes))
+			{
+				infoBoxManager.removeInfoBox(box);
+			}
+			alertBoxes.clear();
+			alertBoxActions.clear();
+		});
 		overlayManager.remove(slotOverlay);
 		clientToolbar.removeNavigation(navButton);
 		navButton = null;
@@ -708,11 +734,12 @@ public class ExchangeInsightsPlugin extends Plugin
 				continue;
 			}
 			slotQuoteFetchedAt.put(id, nowMs);
-			api.fetchQuote(id, quote ->
+			// Slot badges show the price gap, not the margin - no flip needed here.
+			api.fetchQuote(id, false, quote ->
 			{
 				if (quote != null && quote.price != null)
 				{
-					slotQuotes.put(id, new GeQuote(id, "", quote.price.high, quote.price.low, quote.margin, quote.roi, null));
+					slotQuotes.put(id, new GeQuote(id, "", quote.price.high, quote.price.low, quote.margin, quote.roi, null, null, null));
 				}
 			});
 		}
@@ -1089,17 +1116,20 @@ public class ExchangeInsightsPlugin extends Plugin
 		sb.append(gp(q.high));
 		sb.append(" <col=").append(COL_LABEL).append(">· sell</col> ").append(gp(q.low));
 		sb.append("<br>");
-		if (q.margin != null)
+		// Premium users see the Flip Finder's quant-adjusted net margin ("Flip
+		// margin"); everyone else sees the plain quote spread ("Item margin"). The
+		// server only returns the flip figure for a premium token.
+		final boolean useFlip = q.flipMargin != null;
+		final Double marginVal = useFlip ? q.flipMargin : q.margin;
+		final Double roiVal = useFlip ? q.flipRoi : q.roi;
+		if (marginVal != null)
 		{
-			// "Item margin" deliberately: this is the plain quote-spread margin (the
-			// site's Item margins board). "Flip" is reserved for the quant-adjusted
-			// Flip Finder economics, which this overlay does not show.
-			final String col = q.margin >= 0 ? COL_UP : COL_DOWN;
-			sb.append("<col=").append(COL_LABEL).append(">Item margin</col> ");
-			sb.append("<col=").append(col).append('>').append(gpSigned(Math.round(q.margin)));
-			if (q.roi != null)
+			final String col = marginVal >= 0 ? COL_UP : COL_DOWN;
+			sb.append("<col=").append(COL_LABEL).append('>').append(useFlip ? "Flip margin" : "Item margin").append("</col> ");
+			sb.append("<col=").append(col).append('>').append(gpSigned(Math.round(marginVal)));
+			if (roiVal != null)
 			{
-				sb.append(String.format(" (%+.1f%%)", q.roi * 100));
+				sb.append(String.format(" (%+.1f%%)", roiVal * 100));
 			}
 			sb.append("</col> <col=").append(COL_MUTED).append(">after tax</col>");
 		}
@@ -1249,7 +1279,9 @@ public class ExchangeInsightsPlugin extends Plugin
 			name = "Item " + itemId;
 		}
 		final String itemName = name;
-		api.fetchQuote(itemId, quote ->
+		// Ask for the premium flip margin only for the item being offered (bounded
+		// cost); the server returns it only for a premium token.
+		api.fetchQuote(itemId, config.showFlipMargin(), quote ->
 		{
 			quoteInFlight = false;
 			if (quote == null || quote.price == null)
@@ -1263,7 +1295,9 @@ public class ExchangeInsightsPlugin extends Plugin
 				quote.price.low,
 				quote.margin,
 				quote.roi,
-				quote.item != null ? quote.item.geLimit : null);
+				quote.item != null ? quote.item.geLimit : null,
+				quote.flip != null ? quote.flip.margin : null,
+				quote.flip != null ? quote.flip.roi : null);
 		});
 	}
 
@@ -1281,15 +1315,27 @@ public class ExchangeInsightsPlugin extends Plugin
 		}
 		api.fetchAlerts(alerts ->
 		{
+			final AlertDelivery delivery = config.alertDelivery();
 			String lastMessage = null;
 			for (final ApiClient.Alert alert : alerts)
 			{
 				final String title = alert.title == null || alert.title.isEmpty() ? "Watchlist alert" : alert.title;
 				final String body = alert.body == null ? "" : alert.body;
 				final String message = body.isEmpty() ? title : title + " - " + body;
-				notifier.notify("Exchange Insights: " + message);
-				clientThread.invokeLater(() ->
-					client.addChatMessage(ChatMessageType.CONSOLE, "", "<col=b8860b>[Exchange Insights]</col> " + message, null));
+				if (delivery.notification())
+				{
+					notifier.notify("Exchange Insights: " + message);
+				}
+				if (delivery.chat())
+				{
+					clientThread.invokeLater(() ->
+						client.addChatMessage(ChatMessageType.CONSOLE, "", "<col=b8860b>[Exchange Insights]</col> " + message, null));
+				}
+				// An actionable infobox always accompanies the alert - right-click to
+				// Clear it or Open the subject in the browser. Infobox state is only
+				// touched on the client thread (add here, click handler, cleanup).
+				final String link = alert.link;
+				clientThread.invokeLater(() -> addAlertInfoBox(title, message, link));
 				lastMessage = message;
 			}
 			alertsShown += alerts.size();
@@ -1303,6 +1349,51 @@ public class ExchangeInsightsPlugin extends Plugin
 				}
 			});
 		});
+	}
+
+	private static final int MAX_ALERT_BOXES = 6;
+
+	/** Add an alert infobox (capped) and register its right-click actions. */
+	private void addAlertInfoBox(String title, String message, String link)
+	{
+		final AlertInfoBox box = new AlertInfoBox(alertIcon, this, title, message, link);
+		alertBoxes.add(box);
+		alertBoxActions.put(box.clearEntry, () -> removeAlertInfoBox(box));
+		if (box.openEntry != null)
+		{
+			alertBoxActions.put(box.openEntry, () -> LinkBrowser.browse(box.link));
+		}
+		infoBoxManager.addInfoBox(box);
+		// Keep only the most recent few so a run of alerts can't stack up forever.
+		while (alertBoxes.size() > MAX_ALERT_BOXES)
+		{
+			removeAlertInfoBox(alertBoxes.get(0));
+		}
+	}
+
+	private void removeAlertInfoBox(AlertInfoBox box)
+	{
+		if (box == null || !alertBoxes.remove(box))
+		{
+			return;
+		}
+		alertBoxActions.remove(box.clearEntry);
+		if (box.openEntry != null)
+		{
+			alertBoxActions.remove(box.openEntry);
+		}
+		infoBoxManager.removeInfoBox(box);
+	}
+
+	/** Route right-click actions on our alert infoboxes (Clear / Open). */
+	@Subscribe
+	public void onOverlayMenuClicked(OverlayMenuClicked event)
+	{
+		final Runnable action = alertBoxActions.get(event.getEntry());
+		if (action != null)
+		{
+			action.run();
+		}
 	}
 
 	@Subscribe
