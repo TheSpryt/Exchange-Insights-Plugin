@@ -50,6 +50,13 @@ class ExchangeInsightsSlotOverlay extends Overlay
 		{
 			return null;
 		}
+		// render() runs per FRAME, not per tick - bail before touching the offer
+		// array unless the offers index is actually on screen.
+		final Widget index = client.getWidget(InterfaceID.GeOffers.INDEX);
+		if (index == null || index.isHidden())
+		{
+			return null;
+		}
 		final GrandExchangeOffer[] offers = client.getGrandExchangeOffers();
 		if (offers == null)
 		{
