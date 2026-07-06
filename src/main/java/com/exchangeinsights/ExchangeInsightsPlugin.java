@@ -8,7 +8,6 @@ import java.awt.image.BufferedImage;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -185,13 +184,11 @@ public class ExchangeInsightsPlugin extends Plugin
 	private int lastInjFeeLineIdx = -1;
 	private int lastInjFeeLineWidth;
 
-	// Slot-title memo: cached verdict strings and found title widgets, so the
-	// steady state does no string building and no child-array walking (those
-	// getters copy arrays per call).
+	// Slot-title memo: cached verdict strings so the steady state does no string
+	// building (the title widget is re-found each tick - see updateSlotTitles).
 	private final Long[] lastSlotGap = new Long[8];
 	private final boolean[] lastSlotBuy = new boolean[8];
 	private final String[] lastSlotDesired = new String[8];
-	private final Widget[] slotTitleWidgets = new Widget[8];
 
 	@Provides
 	ExchangeInsightsConfig provideConfig(ConfigManager configManager)
@@ -601,7 +598,6 @@ public class ExchangeInsightsPlugin extends Plugin
 			{
 				lastSlotGap[i] = null;
 				lastSlotDesired[i] = null;
-				slotTitleWidgets[i] = null;
 				continue;
 			}
 			final Widget slot = client.getWidget(InterfaceID.GeOffers.INDEX_0 + i);
@@ -626,19 +622,12 @@ public class ExchangeInsightsPlugin extends Plugin
 					: (gap > 0 ? "+" : "-") + net.runelite.client.util.QuantityFormatter.quantityToRSDecimalStack(clamped, true);
 				lastSlotDesired[i] = base + " <col=" + col + ">" + amount + "</col>";
 			}
-			// Reuse the found title widget while it still looks like this slot's
-			// title (the child getters copy arrays, so re-walking every tick is
-			// the expensive part); an interface rebuild fails the check and
-			// triggers one fresh walk.
-			Widget title = slotTitleWidgets[i];
-			String current = title != null ? title.getText() : null;
-			if (current == null || !(current.equals(base) || current.startsWith(base + " ")))
-			{
-				title = findSlotTitle(slot, base);
-				slotTitleWidgets[i] = title;
-				current = title != null ? title.getText() : null;
-			}
-			if (title != null && !lastSlotDesired[i].equals(current))
+			// Find the title child fresh each tick: `slot` is re-fetched per tick so
+			// its children are always live. (Caching the child across ticks breaks
+			// on an interface rebuild - the stale widget still reads back our text,
+			// so writes land on a detached widget and the badge silently vanishes.)
+			final Widget title = findSlotTitle(slot, base);
+			if (title != null && !lastSlotDesired[i].equals(title.getText()))
 			{
 				title.setText(lastSlotDesired[i]);
 			}
@@ -1328,18 +1317,13 @@ public class ExchangeInsightsPlugin extends Plugin
 		final GrandExchangeOfferState st = offer.getState();
 		final boolean cleared = st == GrandExchangeOfferState.EMPTY;
 
+		// Track the fill delta for the sidebar panel's session counter only. The
+		// dashboard derives fills server-side from the offer-book snapshot (the
+		// single, self-healing source), so nothing is sent from here - this just
+		// gives the user local "captured N" feedback.
 		final int delta = fillTracker.observe(slot, cleared, offer.getQuantitySold());
-		if (config.sendFills() && delta > 0)
+		if (delta > 0 && config.sendOffers())
 		{
-			final String type = isBuy(st) ? "buy" : "sell";
-			// Listed price per item (pre-tax). The dashboard applies GE tax itself
-			// so realized margins stay apples-to-apples with the modeled ones.
-			final ApiClient.Fill fill = new ApiClient.Fill(
-				offer.getItemId(), type, offer.getPrice(), delta, Instant.now().getEpochSecond());
-			api.sendFills(Collections.singletonList(fill));
-
-			// Session counter for the sidebar panel (this event runs on the client
-			// thread, so the item-name lookup is safe here).
 			String itemName;
 			try
 			{
