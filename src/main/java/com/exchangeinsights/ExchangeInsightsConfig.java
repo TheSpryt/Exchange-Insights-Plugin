@@ -123,4 +123,16 @@ public interface ExchangeInsightsConfig extends Config
 	{
 		return true;
 	}
+
+	@ConfigItem(
+		keyName = "leftClickCollectToBank",
+		name = "Left-click Collect to bank",
+		description = "Make the Grand Exchange Collect button send everything to your bank on left click. Collect to inventory stays available on right-click.",
+		section = streamsSection,
+		position = 6
+	)
+	default boolean leftClickCollectToBank()
+	{
+		return false;
+	}
 }
