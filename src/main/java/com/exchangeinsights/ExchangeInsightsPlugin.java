@@ -5,6 +5,7 @@ package com.exchangeinsights;
 
 import com.google.inject.Provides;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -12,19 +13,24 @@ import java.util.List;
 import java.util.Map;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.ItemComposition;
+import net.runelite.api.Player;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.GameTick;
 import net.runelite.api.events.GrandExchangeOfferChanged;
+import net.runelite.client.Notifier;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.task.Schedule;
 
 @Slf4j
 @PluginDescriptor(
@@ -64,10 +70,19 @@ public class ExchangeInsightsPlugin extends Plugin
 	private ExchangeInsightsConfig config;
 
 	@Inject
+	private Notifier notifier;
+
+	@Inject
 	private ApiClient api;
 
 	private final FillTracker fillTracker = new FillTracker(GE_SLOTS);
 	private volatile boolean scanning = false;
+
+	// Identity sync: which character this client is logged into, reported once per
+	// login (RSN isn't available the instant LOGGED_IN fires, so the send is armed
+	// there and completed on the first tick that has it).
+	private boolean identityPending = false;
+	private long identitySentHash = -1;
 
 	@Provides
 	ExchangeInsightsConfig provideConfig(ConfigManager configManager)
@@ -79,6 +94,8 @@ public class ExchangeInsightsPlugin extends Plugin
 	protected void startUp()
 	{
 		fillTracker.reset();
+		identityPending = client.getGameState() == GameState.LOGGED_IN;
+		identitySentHash = -1;
 		log.debug("Exchange Insights started (configured={})", api.isConfigured());
 	}
 
@@ -86,6 +103,8 @@ public class ExchangeInsightsPlugin extends Plugin
 	protected void shutDown()
 	{
 		fillTracker.reset();
+		identityPending = false;
+		identitySentHash = -1;
 	}
 
 	@Subscribe
@@ -99,10 +118,65 @@ public class ExchangeInsightsPlugin extends Plugin
 			fillTracker.reset();
 			return;
 		}
+		identityPending = true;
 		if (config.datamineNewItems() && api.isConfigured())
 		{
 			maybeDatamine();
 		}
+	}
+
+	/**
+	 * Report which character this client is logged into (stable account hash + RSN)
+	 * so the dashboard attaches it - and any alts - to the token's owner. The RSN
+	 * isn't available the instant LOGGED_IN fires, so this completes on the first
+	 * tick that has both; re-sent only when the account actually changes.
+	 */
+	@Subscribe
+	public void onGameTick(GameTick event)
+	{
+		if (!identityPending || !api.isConfigured())
+		{
+			return;
+		}
+		final long hash = client.getAccountHash();
+		final Player local = client.getLocalPlayer();
+		final String rsn = local == null ? null : local.getName();
+		if (hash == -1 || rsn == null || rsn.isEmpty())
+		{
+			return;
+		}
+		identityPending = false;
+		if (hash != identitySentHash)
+		{
+			identitySentHash = hash;
+			api.sendIdentity(hash, rsn);
+		}
+	}
+
+	/**
+	 * Poll the dashboard for watchlist alerts routed to the RuneLite channel. The
+	 * server hands each alert out exactly once, so polling is cheap and idempotent;
+	 * only polled while logged in so alerts land where the player can see them.
+	 */
+	@Schedule(period = 30, unit = ChronoUnit.SECONDS, asynchronous = true)
+	public void pollAlerts()
+	{
+		if (!config.inGameAlerts() || !api.isConfigured() || client.getGameState() != GameState.LOGGED_IN)
+		{
+			return;
+		}
+		api.fetchAlerts(alerts ->
+		{
+			for (final ApiClient.Alert alert : alerts)
+			{
+				final String title = alert.title == null || alert.title.isEmpty() ? "Watchlist alert" : alert.title;
+				final String body = alert.body == null ? "" : alert.body;
+				final String message = body.isEmpty() ? title : title + " - " + body;
+				notifier.notify("Exchange Insights: " + message);
+				clientThread.invokeLater(() ->
+					client.addChatMessage(ChatMessageType.CONSOLE, "", "<col=b8860b>[Exchange Insights]</col> " + message, null));
+			}
+		});
 	}
 
 	@Subscribe

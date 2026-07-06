@@ -30,19 +30,20 @@ public interface ExchangeInsightsConfig extends Config
 	@ConfigItem(
 		keyName = "baseUrl",
 		name = "Dashboard URL",
-		description = "Base URL of your Exchange Insights service, e.g. https://exchange-insights.you.workers.dev (no trailing slash needed).",
+		description = "Base URL of the Exchange Insights dashboard. Leave the default unless you self-host.",
 		section = connectionSection,
 		position = 0
 	)
 	default String baseUrl()
 	{
-		return "";
+		return "https://exchange-insights.gg";
 	}
 
 	@ConfigItem(
 		keyName = "token",
 		name = "Plugin token",
-		description = "The PLUGIN_TOKEN secret set on your service. Required to authorize writes. Treat it like a password.",
+		description = "Your personal plugin token - generate it on the dashboard under Account settings. It links this client to your account; treat it like a password.",
+		secret = true,
 		section = connectionSection,
 		position = 1
 	)
@@ -85,5 +86,17 @@ public interface ExchangeInsightsConfig extends Config
 	default boolean datamineNewItems()
 	{
 		return false;
+	}
+
+	@ConfigItem(
+		keyName = "inGameAlerts",
+		name = "In-game alerts",
+		description = "Deliver your watchlist alerts (RuneLite channel) in game as a chat message and system notification.",
+		section = streamsSection,
+		position = 3
+	)
+	default boolean inGameAlerts()
+	{
+		return true;
 	}
 }
