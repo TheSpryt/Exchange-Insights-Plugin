@@ -68,7 +68,7 @@ In RuneLite → plugin settings:
 | **In-game alerts** | on | watchlist alerts as a chat message and/or system notification |
 | **Alert delivery method** | Both | chat message, system notification, or both |
 | **GE offer info** | on | live prices + margin in the offer window text; no account needed |
-| **Premium: show flip margins** | on | premium accounts see the Flip Finder margin instead of the item margin |
+| **Premium: show quant flip margins** | on | premium accounts see the quant flip margin, and the info icon opens flips |
 | **Offer age badges** | on | on the offers screen, flag each active slot vs the market |
 | **Left-click Collect to bank** | off | make the GE Collect button send to bank by default |
 

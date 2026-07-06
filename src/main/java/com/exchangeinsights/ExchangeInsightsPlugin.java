@@ -173,6 +173,9 @@ public class ExchangeInsightsPlugin extends Plugin
 	private static final int EI_SPRITE_ID = -20260706;
 	private Widget geLinkButton;
 	private volatile int geLinkItemId = -1;
+	// True once a quote has come back with a flip figure (i.e. premium account) -
+	// steers the offer-body info icon to the item's flips instead of its margins.
+	private volatile boolean premiumFlip = false;
 
 	// Offer-info memo: the block is rebuilt (string formatting, regex tag-strip,
 	// font measurement) only when an input actually changed; per tick the work is
@@ -857,7 +860,9 @@ public class ExchangeInsightsPlugin extends Plugin
 		final int id = geLinkItemId;
 		if (id > 0 && api.hasUrl())
 		{
-			LinkBrowser.browse(config.baseUrl().trim().replaceAll("/+$", "") + "/#margins?item=" + id);
+			// Premium + quant flips on → open the item's flips; otherwise its margins.
+			final String tab = config.showFlipMargin() && premiumFlip ? "flips" : "margins";
+			LinkBrowser.browse(config.baseUrl().trim().replaceAll("/+$", "") + "/#" + tab + "?item=" + id);
 		}
 	}
 
@@ -1026,7 +1031,7 @@ public class ExchangeInsightsPlugin extends Plugin
 		if (marginVal != null)
 		{
 			final String col = marginVal >= 0 ? COL_UP : COL_DOWN;
-			sb.append("<col=").append(COL_LABEL).append('>').append(useFlip ? "Flip margin" : "Item margin").append("</col> ");
+			sb.append("<col=").append(COL_LABEL).append('>').append(useFlip ? "Quant flip" : "Item margin").append("</col> ");
 			sb.append("<col=").append(col).append('>').append(gpSigned(Math.round(marginVal)));
 			if (roiVal != null)
 			{
@@ -1189,6 +1194,9 @@ public class ExchangeInsightsPlugin extends Plugin
 			{
 				return; // keep whatever we had; the next refresh window retries
 			}
+			// The server only returns a flip figure for a premium token, so its
+			// presence tells us the account is premium (drives the info-icon link).
+			premiumFlip = quote.flip != null;
 			geQuote = new GeQuote(
 				itemId,
 				quote.item != null && quote.item.name != null ? quote.item.name : itemName,
