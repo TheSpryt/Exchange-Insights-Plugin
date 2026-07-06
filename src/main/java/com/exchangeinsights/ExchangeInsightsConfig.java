@@ -53,23 +53,11 @@ public interface ExchangeInsightsConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "sendFills",
-		name = "Send GE fills",
-		description = "Forward your Grand Exchange buys/sells so the dashboard can compute realized vs modeled flip P&L.",
+		keyName = "sendOffers",
+		name = "Sync GE offers & trades",
+		description = "Sync your live Grand Exchange offers to the dashboard's Grand Exchange board, and record every completed buy/sell into your verified trade history. Sends only your own GE activity.",
 		section = streamsSection,
 		position = 0
-	)
-	default boolean sendFills()
-	{
-		return true;
-	}
-
-	@ConfigItem(
-		keyName = "sendOffers",
-		name = "Send GE offer book",
-		description = "Also forward live offer state changes (placed/cancelled), not just completed fills.",
-		section = streamsSection,
-		position = 1
 	)
 	default boolean sendOffers()
 	{
