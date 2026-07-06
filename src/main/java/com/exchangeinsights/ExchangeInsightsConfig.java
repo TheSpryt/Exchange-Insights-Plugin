@@ -42,7 +42,7 @@ public interface ExchangeInsightsConfig extends Config
 	@ConfigItem(
 		keyName = "token",
 		name = "Plugin token",
-		description = "Your personal plugin token - generate it on the dashboard under Account settings. It links this client to your account; treat it like a password.",
+		description = "Your personal plugin token - generate it on the dashboard under Account settings, or use 'Link account in browser' below. Treat it like a password.",
 		secret = true,
 		section = connectionSection,
 		position = 1
@@ -50,6 +50,18 @@ public interface ExchangeInsightsConfig extends Config
 	default String token()
 	{
 		return "";
+	}
+
+	@ConfigItem(
+		keyName = "linkAccount",
+		name = "Link account in browser",
+		description = "Tick this while logged into OSRS to link your account automatically: it opens the dashboard in your browser, you approve, and the plugin fills in the token for you. Resets itself once done.",
+		section = connectionSection,
+		position = 2
+	)
+	default boolean linkAccount()
+	{
+		return false;
 	}
 
 	@ConfigItem(
