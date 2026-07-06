@@ -1207,7 +1207,13 @@ public class ExchangeInsightsPlugin extends Plugin
 			// item where the flip value can't be modelled), so its presence tells us
 			// the account is premium - drives the flip label and the info-icon link.
 			final boolean premium = quote.flip != null;
-			premiumFlip = premium;
+			// Sticky: once we've confirmed the account is premium, keep it so the
+			// info-icon reliably opens flips even if a later thin item returns no
+			// flip object. The config toggle still gates whether flips are used.
+			if (premium)
+			{
+				premiumFlip = true;
+			}
 			geQuote = new GeQuote(
 				itemId,
 				quote.item != null && quote.item.name != null ? quote.item.name : itemName,
