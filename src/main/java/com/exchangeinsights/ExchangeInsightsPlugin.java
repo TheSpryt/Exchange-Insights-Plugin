@@ -443,6 +443,7 @@ public class ExchangeInsightsPlugin extends Plugin
 		injectGeOfferText();
 		updateGeLinkButton();
 		updateSlotQuotes();
+		updateSlotTitles();
 
 		if (!identityPending || !api.isConfigured())
 		{
@@ -467,6 +468,110 @@ public class ExchangeInsightsPlugin extends Plugin
 	GeQuote getSlotQuote(int itemId)
 	{
 		return slotQuotes.get(itemId);
+	}
+
+	/**
+	 * How an active offer has aged: the signed per-item gp gap to the price that
+	 * fills right now. Positive = still ahead of the market (bid at/over
+	 * insta-buy, ask at/under insta-sell), negative = the market moved past it.
+	 * Null when the offer isn't active or the quote isn't in yet.
+	 */
+	Long offerGap(GrandExchangeOffer o)
+	{
+		if (o == null)
+		{
+			return null;
+		}
+		final GrandExchangeOfferState st = o.getState();
+		final GeQuote q = slotQuotes.get(o.getItemId());
+		if (q == null)
+		{
+			return null;
+		}
+		if (st == GrandExchangeOfferState.BUYING)
+		{
+			return q.high == null ? null : (long) o.getPrice() - q.high;
+		}
+		if (st == GrandExchangeOfferState.SELLING)
+		{
+			return q.low == null ? null : q.low - o.getPrice();
+		}
+		return null;
+	}
+
+	/**
+	 * Fold the age gap into each slot's Buy/Sell title ("Sell -14.774M" red,
+	 * "Buy +1.34M" green). The title child is found by its text rather than a
+	 * child index, so an interface revision can't silently break it; the game
+	 * rewrites the text on rebuild, so this re-asserts every tick (equality
+	 * guard makes the steady state free).
+	 */
+	private void updateSlotTitles()
+	{
+		if (!config.geSlotBadges() || !api.hasUrl())
+		{
+			return;
+		}
+		final GrandExchangeOffer[] offers = client.getGrandExchangeOffers();
+		if (offers == null)
+		{
+			return;
+		}
+		for (int i = 0; i < offers.length && i < 8; i++)
+		{
+			final Long gap = offerGap(offers[i]);
+			if (gap == null)
+			{
+				continue;
+			}
+			final Widget slot = client.getWidget(InterfaceID.GeOffers.INDEX_0 + i);
+			if (slot == null || slot.isHidden())
+			{
+				continue;
+			}
+			final boolean buy = offers[i].getState() == GrandExchangeOfferState.BUYING;
+			final String base = buy ? "Buy" : "Sell";
+			final Widget title = findSlotTitle(slot, base);
+			if (title == null)
+			{
+				continue;
+			}
+			final String col = gap >= 0 ? COL_UP : COL_DOWN;
+			final int clamped = (int) Math.min(Integer.MAX_VALUE, Math.abs(gap));
+			final String desired = base + " <col=" + col + ">" + (gap >= 0 ? "+" : "-")
+				+ net.runelite.client.util.QuantityFormatter.quantityToRSDecimalStack(clamped, true) + "</col>";
+			if (!desired.equals(title.getText()))
+			{
+				title.setText(desired);
+			}
+		}
+	}
+
+	/** The slot's title text child: the widget whose text is (or starts with) the
+	 *  vanilla Buy/Sell label - including one we already rewrote. */
+	private static Widget findSlotTitle(Widget slot, String base)
+	{
+		final Widget[][] groups = { slot.getStaticChildren(), slot.getDynamicChildren(), slot.getNestedChildren() };
+		for (final Widget[] group : groups)
+		{
+			if (group == null)
+			{
+				continue;
+			}
+			for (final Widget c : group)
+			{
+				if (c == null)
+				{
+					continue;
+				}
+				final String t = c.getText();
+				if (t != null && (t.equals(base) || t.startsWith(base + " ")))
+				{
+					return c;
+				}
+			}
+		}
+		return null;
 	}
 
 	/**

@@ -5,26 +5,22 @@ package com.exchangeinsights;
 
 import java.awt.Color;
 import java.awt.Dimension;
-import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import javax.inject.Inject;
 import net.runelite.api.Client;
 import net.runelite.api.GrandExchangeOffer;
-import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
-import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
-import net.runelite.client.util.QuantityFormatter;
 
 /**
- * GE offers screen: badge each active slot with how the offer has aged against
- * the live market. Green "AHEAD" = your price still fills first (bid at/over
- * insta-buy, ask at/under insta-sell); red "-Ngp" = the market has moved past
- * your price by that many gp per item, so it won't fill until it comes back.
+ * GE offers screen: outline each active slot by how the offer has aged against
+ * the live market - green when your price still fills first, red when the
+ * market has moved past it. The gp amount itself is folded into the slot's
+ * Buy/Sell title by the plugin; this overlay only draws the frames.
  */
 class ExchangeInsightsSlotOverlay extends Overlay
 {
@@ -57,20 +53,12 @@ class ExchangeInsightsSlotOverlay extends Overlay
 		{
 			return null;
 		}
-		g.setFont(FontManager.getRunescapeSmallFont());
-		final FontMetrics fm = g.getFontMetrics();
 		for (int i = 0; i < offers.length && i < 8; i++)
 		{
-			final GrandExchangeOffer o = offers[i];
-			if (o == null)
+			final Long gap = plugin.offerGap(offers[i]);
+			if (gap == null)
 			{
 				continue;
-			}
-			final GrandExchangeOfferState st = o.getState();
-			final boolean buy = st == GrandExchangeOfferState.BUYING;
-			if (!buy && st != GrandExchangeOfferState.SELLING)
-			{
-				continue; // empty, complete, or cancelled - nothing to age
 			}
 			// INDEX_0..INDEX_7 are contiguous component ids.
 			final Widget slot = client.getWidget(InterfaceID.GeOffers.INDEX_0 + i);
@@ -78,65 +66,14 @@ class ExchangeInsightsSlotOverlay extends Overlay
 			{
 				continue;
 			}
-			final ExchangeInsightsPlugin.GeQuote q = plugin.getSlotQuote(o.getItemId());
-			if (q == null)
+			final Rectangle b = slot.getBounds();
+			if (b == null || b.width <= 0)
 			{
 				continue;
 			}
-			final String text;
-			final Color color;
-			if (buy)
-			{
-				if (q.high == null)
-				{
-					continue;
-				}
-				if (o.getPrice() >= q.high)
-				{
-					text = "AHEAD";
-					color = AHEAD;
-				}
-				else
-				{
-					text = "-" + gp(q.high - o.getPrice());
-					color = BEHIND;
-				}
-			}
-			else
-			{
-				if (q.low == null)
-				{
-					continue;
-				}
-				if (o.getPrice() <= q.low)
-				{
-					text = "AHEAD";
-					color = AHEAD;
-				}
-				else
-				{
-					text = "-" + gp(o.getPrice() - q.low);
-					color = BEHIND;
-				}
-			}
-			final Rectangle b = slot.getBounds();
-			// Top-right of the slot's title band, clear of the centred Buy/Sell label.
-			final int tx = b.x + b.width - fm.stringWidth(text) - 5;
-			final int ty = b.y + 14;
-			g.setColor(Color.BLACK);
-			g.drawString(text, tx + 1, ty + 1);
-			g.setColor(color);
-			g.drawString(text, tx, ty);
+			g.setColor(gap >= 0 ? AHEAD : BEHIND);
+			g.drawRect(b.x, b.y, b.width - 1, b.height - 1);
 		}
 		return null;
-	}
-
-	/** Per-item gp gap in the tersest RS stack notation ("774", "51K", "13M") -
-	 *  the badge shares a narrow title band with the centred Buy/Sell label, so
-	 *  width matters more than precision (the details view has exact numbers). */
-	private static String gp(long v)
-	{
-		final int clamped = (int) Math.min(Integer.MAX_VALUE, Math.max(0, v));
-		return QuantityFormatter.quantityToRSDecimalStack(clamped, false);
 	}
 }
