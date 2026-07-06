@@ -9,7 +9,6 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -122,6 +121,10 @@ public class ExchangeInsightsPlugin extends Plugin
 
 	// Device-link flow: true while a browser approval is pending.
 	private volatile boolean linking = false;
+
+	// Live offer book: set on any offer change (incl. the login re-broadcast burst),
+	// drained once per tick so a burst produces a single full-book push.
+	private volatile boolean offersDirty = false;
 
 	// GE offer info: quote for the item currently selected in the offer window.
 	// Written by the fetch callback (HTTP thread), read on the client thread when
@@ -469,6 +472,12 @@ public class ExchangeInsightsPlugin extends Plugin
 			return;
 		}
 		identityPending = true;
+		// Push the current book on login too, in case the client's re-broadcast is
+		// missed; the game fires per-slot changes right after, which also flag it.
+		if (config.sendOffers())
+		{
+			offersDirty = true;
+		}
 		if (config.datamineNewItems() && api.isConfigured())
 		{
 			maybeDatamine();
@@ -489,6 +498,7 @@ public class ExchangeInsightsPlugin extends Plugin
 		updateGeLinkButton();
 		updateSlotQuotes();
 		updateSlotTitles();
+		flushOfferBook();
 
 		if (!identityPending || !api.isConfigured())
 		{
@@ -1351,18 +1361,55 @@ public class ExchangeInsightsPlugin extends Plugin
 			});
 		}
 
+		// The login re-broadcast fires one event per slot in a burst; flag the book
+		// dirty and push the whole 8-slot snapshot once on the next tick (coalesced).
 		if (config.sendOffers())
 		{
-			final Map<String, Object> payload = new HashMap<>();
-			payload.put("slot", slot);
-			payload.put("state", st.name());
-			payload.put("price", offer.getPrice());
-			payload.put("totalQty", offer.getTotalQuantity());
-			payload.put("qtySold", offer.getQuantitySold());
-			payload.put("spent", offer.getSpent());
-			api.sendEvents(Collections.singletonList(
-				new ApiClient.Event("ge_offer", offer.getItemId(), payload, Instant.now().getEpochSecond())));
+			offersDirty = true;
 		}
+	}
+
+	/**
+	 * Push the full GE offer book (all 8 slots) to the dashboard so its Grand
+	 * Exchange widget mirrors the in-game GE. Sending every slot each time - EMPTY
+	 * included - makes the server state self-healing: a missed event is corrected
+	 * by the next snapshot. Coalesced to at most one send per tick.
+	 */
+	private void flushOfferBook()
+	{
+		if (!offersDirty)
+		{
+			return;
+		}
+		offersDirty = false;
+		if (!config.sendOffers() || !api.isConfigured())
+		{
+			return;
+		}
+		final GrandExchangeOffer[] offers = client.getGrandExchangeOffers();
+		if (offers == null)
+		{
+			return;
+		}
+		final List<ApiClient.OfferSlot> book = new ArrayList<>();
+		for (int slot = 0; slot < offers.length && slot < GE_SLOTS; slot++)
+		{
+			final GrandExchangeOffer o = offers[slot];
+			final GrandExchangeOfferState st = o == null ? GrandExchangeOfferState.EMPTY : o.getState();
+			final ApiClient.OfferSlot s = new ApiClient.OfferSlot();
+			s.slot = slot;
+			s.state = st.name();
+			if (o != null && st != GrandExchangeOfferState.EMPTY)
+			{
+				s.itemId = o.getItemId();
+				s.price = o.getPrice();
+				s.qty = o.getTotalQuantity();
+				s.filledQty = o.getQuantitySold();
+				s.spent = o.getSpent();
+			}
+			book.add(s);
+		}
+		api.sendOffers(book);
 	}
 
 	private static boolean isBuy(GrandExchangeOfferState st)

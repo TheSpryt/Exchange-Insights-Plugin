@@ -100,6 +100,19 @@ class ApiClient
 		}
 	}
 
+	/** One GE slot's live state for the offer-book sync. Nulls (Integer) so EMPTY
+	 *  slots serialise without item/price fields. */
+	static final class OfferSlot
+	{
+		int slot;
+		String state; // EMPTY | BUYING | SELLING | BOUGHT | SOLD | CANCELLED_BUY | CANCELLED_SELL
+		Integer itemId;
+		Integer price;
+		Integer qty;
+		Integer filledQty;
+		Integer spent;
+	}
+
 	private static final class FillsPayload
 	{
 		final List<Fill> fills;
@@ -108,6 +121,17 @@ class ApiClient
 		FillsPayload(List<Fill> fills)
 		{
 			this.fills = fills;
+		}
+	}
+
+	private static final class OffersPayload
+	{
+		final List<OfferSlot> offers;
+		final String source = SOURCE;
+
+		OffersPayload(List<OfferSlot> offers)
+		{
+			this.offers = offers;
 		}
 	}
 
@@ -268,6 +292,15 @@ class ApiClient
 		if (!events.isEmpty())
 		{
 			post("/api/plugin/events", new EventsPayload(events));
+		}
+	}
+
+	/** Push the full GE offer book snapshot (all slots, EMPTY included). */
+	void sendOffers(List<OfferSlot> offers)
+	{
+		if (!offers.isEmpty())
+		{
+			post("/api/plugin/offers", new OffersPayload(offers));
 		}
 	}
 
