@@ -139,10 +139,11 @@ public class ExchangeInsightsPlugin extends Plugin
 		final Double margin; // plain item margin (spread after tax)
 		final Double roi;
 		final Integer geLimit;
-		final Double flipMargin; // premium: quant-adjusted flip net margin (null otherwise)
+		final boolean premium; // account is premium with quant flips (label as flip)
+		final Double flipMargin; // quant-adjusted flip net margin, null if not modelled/premium
 		final Double flipRoi;
 
-		GeQuote(int itemId, String itemName, Long high, Long low, Double margin, Double roi, Integer geLimit, Double flipMargin, Double flipRoi)
+		GeQuote(int itemId, String itemName, Long high, Long low, Double margin, Double roi, Integer geLimit, boolean premium, Double flipMargin, Double flipRoi)
 		{
 			this.itemId = itemId;
 			this.itemName = itemName;
@@ -151,6 +152,7 @@ public class ExchangeInsightsPlugin extends Plugin
 			this.margin = margin;
 			this.roi = roi;
 			this.geLimit = geLimit;
+			this.premium = premium;
 			this.flipMargin = flipMargin;
 			this.flipRoi = flipRoi;
 		}
@@ -649,7 +651,7 @@ public class ExchangeInsightsPlugin extends Plugin
 			{
 				if (quote != null && quote.price != null)
 				{
-					slotQuotes.put(id, new GeQuote(id, "", quote.price.high, quote.price.low, quote.margin, quote.roi, null, null, null));
+					slotQuotes.put(id, new GeQuote(id, "", quote.price.high, quote.price.low, quote.margin, quote.roi, null, false, null, null));
 				}
 			});
 		}
@@ -1028,12 +1030,13 @@ public class ExchangeInsightsPlugin extends Plugin
 		sb.append(gp(q.high));
 		sb.append(" <col=").append(COL_LABEL).append(">· sell</col> ").append(gp(q.low));
 		sb.append("<br>");
-		// Premium users see the Flip Finder's quant-adjusted net margin ("Flip
-		// margin"); everyone else sees the plain quote spread ("Item margin"). The
-		// server only returns the flip figure for a premium token.
-		final boolean useFlip = q.flipMargin != null;
-		final Double marginVal = useFlip ? q.flipMargin : q.margin;
-		final Double roiVal = useFlip ? q.flipRoi : q.roi;
+		// Premium users see the Flip Finder's quant margin ("Quant flip"); everyone
+		// else sees the plain quote spread ("Item margin"). On a thin market the flip
+		// value can't be modelled, so it falls back to the plain spread but keeps the
+		// "Quant flip" label (the account is still in flip mode).
+		final boolean useFlip = q.premium;
+		final Double marginVal = useFlip && q.flipMargin != null ? q.flipMargin : q.margin;
+		final Double roiVal = useFlip && q.flipRoi != null ? q.flipRoi : q.roi;
 		if (marginVal != null)
 		{
 			final String col = marginVal >= 0 ? COL_UP : COL_DOWN;
@@ -1200,9 +1203,11 @@ public class ExchangeInsightsPlugin extends Plugin
 			{
 				return; // keep whatever we had; the next refresh window retries
 			}
-			// The server only returns a flip figure for a premium token, so its
-			// presence tells us the account is premium (drives the info-icon link).
-			premiumFlip = quote.flip != null;
+			// The server includes a flip object for a premium token (even on a thin
+			// item where the flip value can't be modelled), so its presence tells us
+			// the account is premium - drives the flip label and the info-icon link.
+			final boolean premium = quote.flip != null;
+			premiumFlip = premium;
 			geQuote = new GeQuote(
 				itemId,
 				quote.item != null && quote.item.name != null ? quote.item.name : itemName,
@@ -1211,6 +1216,7 @@ public class ExchangeInsightsPlugin extends Plugin
 				quote.margin,
 				quote.roi,
 				quote.item != null ? quote.item.geLimit : null,
+				premium,
 				quote.flip != null ? quote.flip.margin : null,
 				quote.flip != null ? quote.flip.roi : null);
 		});
