@@ -5,17 +5,13 @@ package com.exchangeinsights;
 
 import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
-import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import javax.inject.Inject;
-import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
@@ -39,13 +35,10 @@ import net.runelite.client.Notifier;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
-import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.task.Schedule;
-import net.runelite.client.ui.ClientToolbar;
-import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.ui.overlay.infobox.InfoBoxManager;
 import net.runelite.client.util.ImageUtil;
@@ -92,9 +85,6 @@ public class ExchangeInsightsPlugin extends Plugin
 	private Notifier notifier;
 
 	@Inject
-	private ClientToolbar clientToolbar;
-
-	@Inject
 	private OverlayManager overlayManager;
 
 	@Inject
@@ -104,12 +94,8 @@ public class ExchangeInsightsPlugin extends Plugin
 	private InfoBoxManager infoBoxManager;
 
 	@Inject
-	private ScheduledExecutorService executor;
-
-	@Inject
 	private ApiClient api;
 
-	private final FillTracker fillTracker = new FillTracker(GE_SLOTS);
 	private volatile boolean scanning = false;
 
 	// Alert infoboxes (client-thread state): the boxes shown and a lookup from each
@@ -123,15 +109,6 @@ public class ExchangeInsightsPlugin extends Plugin
 	// there and completed on the first tick that has it).
 	private boolean identityPending = false;
 	private long identitySentHash = -1;
-
-	// Sidebar panel: session counters live here, the panel just renders them.
-	private ExchangeInsightsPanel panel;
-	private NavigationButton navButton;
-	private int fillsSent = 0;
-	private int alertsShown = 0;
-
-	// Device-link flow: true while a browser approval is pending.
-	private volatile boolean linking = false;
 
 	// Live offer book: set on any offer change (incl. the login re-broadcast burst),
 	// drained once per tick so a burst produces a single full-book push.
@@ -215,25 +192,16 @@ public class ExchangeInsightsPlugin extends Plugin
 	@Override
 	protected void startUp()
 	{
-		fillTracker.reset();
 		identityPending = client.getGameState() == GameState.LOGGED_IN;
 		identitySentHash = -1;
-		fillsSent = 0;
-		alertsShown = 0;
 
-		panel = new ExchangeInsightsPanel(this::testConnection, this::startAccountLink);
+		// Shared icon: the alert infoboxes and the clickable margins-link sprite in
+		// the GE offer body (the plugin has no sidebar panel - config lives in the
+		// RuneLite plugin settings).
 		final BufferedImage icon = ImageUtil.loadImageResource(ExchangeInsightsPlugin.class, "panel_icon.png");
 		alertIcon = icon;
 		clientThread.invoke(() -> client.getSpriteOverrides().put(EI_SPRITE_ID, ImageUtil.getImageSpritePixels(icon, client)));
-		navButton = NavigationButton.builder()
-			.tooltip("Exchange Insights")
-			.icon(icon)
-			.priority(7)
-			.panel(panel)
-			.build();
-		clientToolbar.addNavigation(navButton);
 		overlayManager.add(slotOverlay);
-		refreshConnectionStatus();
 
 		log.debug("Exchange Insights started (configured={})", api.isConfigured());
 	}
@@ -241,10 +209,8 @@ public class ExchangeInsightsPlugin extends Plugin
 	@Override
 	protected void shutDown()
 	{
-		fillTracker.reset();
 		identityPending = false;
 		identitySentHash = -1;
-		linking = false;
 		geQuote = null;
 		currentGeItem = -1;
 		slotQuotes.clear();
@@ -259,9 +225,6 @@ public class ExchangeInsightsPlugin extends Plugin
 			alertBoxActions.clear();
 		});
 		overlayManager.remove(slotOverlay);
-		clientToolbar.removeNavigation(navButton);
-		navButton = null;
-		panel = null;
 		final Widget button = geLinkButton;
 		geLinkButton = null;
 		geLinkItemId = -1;
@@ -280,15 +243,6 @@ public class ExchangeInsightsPlugin extends Plugin
 				}
 			}
 		});
-	}
-
-	@Subscribe
-	public void onConfigChanged(ConfigChanged event)
-	{
-		if (ExchangeInsightsConfig.GROUP.equals(event.getGroup()))
-		{
-			refreshConnectionStatus();
-		}
 	}
 
 	/**
@@ -314,184 +268,12 @@ public class ExchangeInsightsPlugin extends Plugin
 		}
 	}
 
-	/** Reflect the connection settings on the panel; pings when fully configured. */
-	private void refreshConnectionStatus()
-	{
-		if (!api.isConfigured())
-		{
-			SwingUtilities.invokeLater(() ->
-			{
-				if (panel != null && !linking)
-				{
-					panel.setTesting(false);
-					panel.setLinkVisible(true);
-					panel.setLinkEnabled(true);
-					panel.setStatus("Not linked - the GE overlay already works, but link your account for fills, alerts and flip tracking. Press Link account while logged into OSRS (or paste a token in the plugin settings).", ExchangeInsightsPanel.MUTED);
-				}
-			});
-			return;
-		}
-		linking = false;
-		SwingUtilities.invokeLater(() ->
-		{
-			if (panel != null)
-			{
-				panel.setLinkVisible(false);
-			}
-		});
-		testConnection();
-	}
-
-	/**
-	 * One-click account link: mint a code pair on the dashboard, open the user's
-	 * browser to approve it, and poll until the token arrives - then store it in
-	 * config, which flips the panel to Connected via the normal config-change path.
-	 */
-	private void startAccountLink()
-	{
-		if (linking || api.isConfigured())
-		{
-			return;
-		}
-		if (!api.hasUrl())
-		{
-			SwingUtilities.invokeLater(() -> panel.setStatus("Set the dashboard URL in the plugin settings first.", ExchangeInsightsPanel.ERR_RED));
-			return;
-		}
-		if (client.getGameState() != GameState.LOGGED_IN || client.getAccountHash() == -1)
-		{
-			SwingUtilities.invokeLater(() -> panel.setStatus("Log into OSRS first, then press Link account - the link ties this character to your dashboard account.", ExchangeInsightsPanel.WARN_YELLOW));
-			return;
-		}
-		final long hash = client.getAccountHash();
-		final Player local = client.getLocalPlayer();
-		final String rsn = local == null ? null : local.getName();
-		linking = true;
-		SwingUtilities.invokeLater(() ->
-		{
-			panel.setLinkEnabled(false);
-			panel.setStatus("Opening your browser - sign in and approve the link there…", ExchangeInsightsPanel.WARN_YELLOW);
-		});
-		api.startLink(hash, rsn, start ->
-		{
-			if (start == null || start.deviceSecret == null || start.verificationUrl == null)
-			{
-				linking = false;
-				SwingUtilities.invokeLater(() ->
-				{
-					if (panel != null)
-					{
-						panel.setLinkEnabled(true);
-						panel.setStatus("Couldn't reach the dashboard to start linking - check the URL and try again.", ExchangeInsightsPanel.ERR_RED);
-					}
-				});
-				return;
-			}
-			LinkBrowser.browse(start.verificationUrl);
-			scheduleLinkPoll(start.deviceSecret, start.expiresAt, Math.max(2, start.pollSeconds));
-		});
-	}
-
-	private void scheduleLinkPoll(String deviceSecret, long expiresAt, int intervalSeconds)
-	{
-		if (!linking)
-		{
-			return;
-		}
-		if (Instant.now().getEpochSecond() > expiresAt)
-		{
-			linking = false;
-			SwingUtilities.invokeLater(() ->
-			{
-				if (panel != null)
-				{
-					panel.setLinkEnabled(true);
-					panel.setStatus("Link request expired - press Link account to try again.", ExchangeInsightsPanel.ERR_RED);
-				}
-			});
-			return;
-		}
-		executor.schedule(() -> api.pollLink(deviceSecret, res ->
-		{
-			if (!linking)
-			{
-				return;
-			}
-			if (res == null || res.status == null || "pending".equals(res.status))
-			{
-				scheduleLinkPoll(deviceSecret, expiresAt, intervalSeconds);
-				return;
-			}
-			linking = false;
-			if ("approved".equals(res.status) && res.token != null && !res.token.isEmpty())
-			{
-				// Storing the token fires ConfigChanged → refreshConnectionStatus →
-				// ping → the panel goes green. Nothing else to do here.
-				configManager.setConfiguration(ExchangeInsightsConfig.GROUP, "token", res.token);
-			}
-			else
-			{
-				final String msg = "denied".equals(res.status)
-					? "Link denied in the browser."
-					: "Link request expired or was already used - press Link account to try again.";
-				SwingUtilities.invokeLater(() ->
-				{
-					if (panel != null)
-					{
-						panel.setLinkEnabled(true);
-						panel.setStatus(msg, ExchangeInsightsPanel.ERR_RED);
-					}
-				});
-			}
-		}), intervalSeconds, TimeUnit.SECONDS);
-	}
-
-	private void testConnection()
-	{
-		if (!api.isConfigured())
-		{
-			refreshConnectionStatus();
-			return;
-		}
-		SwingUtilities.invokeLater(() ->
-		{
-			if (panel != null)
-			{
-				panel.setTesting(true);
-				panel.setStatus("Checking connection…", ExchangeInsightsPanel.WARN_YELLOW);
-			}
-		});
-		api.ping((status, handle) -> SwingUtilities.invokeLater(() ->
-		{
-			if (panel == null)
-			{
-				return;
-			}
-			panel.setTesting(false);
-			switch (status)
-			{
-				case OK:
-					panel.setStatus(handle != null && !handle.isEmpty() ? "Connected as @" + handle : "Connected", ExchangeInsightsPanel.OK_GREEN);
-					break;
-				case UNAUTHORIZED:
-					panel.setStatus("Invalid or revoked token - generate a new one on the dashboard under Account settings.", ExchangeInsightsPanel.ERR_RED);
-					break;
-				default:
-					panel.setStatus("Could not reach the dashboard - check the URL and your connection.", ExchangeInsightsPanel.ERR_RED);
-					break;
-			}
-		}));
-	}
-
 	@Subscribe
 	public void onGameStateChanged(GameStateChanged event)
 	{
 		final GameState state = event.getGameState();
 		if (state != GameState.LOGGED_IN)
 		{
-			// On logout/hop, forget slot state so the re-broadcast snapshot on the
-			// next login re-baselines instead of replaying old fills as new.
-			fillTracker.reset();
 			return;
 		}
 		identityPending = true;
@@ -1316,7 +1098,6 @@ public class ExchangeInsightsPlugin extends Plugin
 		api.fetchAlerts(alerts ->
 		{
 			final AlertDelivery delivery = config.alertDelivery();
-			String lastMessage = null;
 			for (final ApiClient.Alert alert : alerts)
 			{
 				final String title = alert.title == null || alert.title.isEmpty() ? "Watchlist alert" : alert.title;
@@ -1336,18 +1117,7 @@ public class ExchangeInsightsPlugin extends Plugin
 				// touched on the client thread (add here, click handler, cleanup).
 				final String link = alert.link;
 				clientThread.invokeLater(() -> addAlertInfoBox(title, message, link));
-				lastMessage = message;
 			}
-			alertsShown += alerts.size();
-			final int count = alertsShown;
-			final String last = lastMessage;
-			SwingUtilities.invokeLater(() ->
-			{
-				if (panel != null)
-				{
-					panel.setAlerts(count, last);
-				}
-			});
 		});
 	}
 
@@ -1403,41 +1173,9 @@ public class ExchangeInsightsPlugin extends Plugin
 		{
 			return;
 		}
-		final GrandExchangeOffer offer = event.getOffer();
-		final int slot = event.getSlot();
-		final GrandExchangeOfferState st = offer.getState();
-		final boolean cleared = st == GrandExchangeOfferState.EMPTY;
-
-		// Track the fill delta for the sidebar panel's session counter only. The
-		// dashboard derives fills server-side from the offer-book snapshot (the
-		// single, self-healing source), so nothing is sent from here - this just
-		// gives the user local "captured N" feedback.
-		final int delta = fillTracker.observe(slot, cleared, offer.getQuantitySold());
-		if (delta > 0 && config.sendOffers())
-		{
-			String itemName;
-			try
-			{
-				itemName = itemManager.getItemComposition(offer.getItemId()).getName();
-			}
-			catch (RuntimeException ex)
-			{
-				itemName = "item " + offer.getItemId();
-			}
-			final String desc = String.format("%s %,d × %s @ %,d gp",
-				isBuy(st) ? "Bought" : "Sold", delta, itemName, offer.getPrice());
-			final int count = ++fillsSent;
-			SwingUtilities.invokeLater(() ->
-			{
-				if (panel != null)
-				{
-					panel.setFills(count, desc);
-				}
-			});
-		}
-
 		// The login re-broadcast fires one event per slot in a burst; flag the book
 		// dirty and push the whole 8-slot snapshot once on the next tick (coalesced).
+		// The dashboard derives fills server-side from that snapshot.
 		if (config.sendOffers())
 		{
 			offersDirty = true;
@@ -1485,13 +1223,6 @@ public class ExchangeInsightsPlugin extends Plugin
 			book.add(s);
 		}
 		api.sendOffers(book);
-	}
-
-	private static boolean isBuy(GrandExchangeOfferState st)
-	{
-		return st == GrandExchangeOfferState.BUYING
-			|| st == GrandExchangeOfferState.BOUGHT
-			|| st == GrandExchangeOfferState.CANCELLED_BUY;
 	}
 
 	/**
