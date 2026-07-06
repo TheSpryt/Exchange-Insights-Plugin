@@ -30,6 +30,7 @@ import net.runelite.api.Varbits;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.GrandExchangeOfferChanged;
+import net.runelite.api.events.MenuEntryAdded;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.JavaScriptCallback;
 import net.runelite.api.widgets.Widget;
@@ -240,6 +241,29 @@ public class ExchangeInsightsPlugin extends Plugin
 		if (ExchangeInsightsConfig.GROUP.equals(event.getGroup()))
 		{
 			refreshConnectionStatus();
+		}
+	}
+
+	/**
+	 * Left-click Collect to bank: deprioritise "Collect to inventory" on the GE
+	 * Collect button so "Collect to bank" wins the default click. Scoped to that
+	 * one widget; the inventory option stays available on right-click.
+	 */
+	@Subscribe
+	public void onMenuEntryAdded(MenuEntryAdded event)
+	{
+		if (!config.leftClickCollectToBank())
+		{
+			return;
+		}
+		if (event.getActionParam1() != InterfaceID.GeOffers.COLLECTALL)
+		{
+			return;
+		}
+		final String option = event.getOption();
+		if (option != null && option.toLowerCase().startsWith("collect to inv"))
+		{
+			event.getMenuEntry().setDeprioritized(true);
 		}
 	}
 
