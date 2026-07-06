@@ -241,13 +241,15 @@ class ApiClient
 		}
 	}
 
-	/** Public live quote for one item (?econ=1 adds catalogue facts). No auth needed. */
+	/** Public live quote for one item (?econ=1 adds catalogue facts). No auth needed.
+	 *  With ?flip=1 and a premium token, `flip` carries the Flip Finder net margin. */
 	static final class Quote
 	{
 		Price price;
-		Double margin; // per-unit after-tax flip margin, gp
+		Double margin; // per-unit after-tax item margin (plain spread), gp
 		Double roi; // fraction, 0.05 = +5%
 		Item item;
+		Flip flip; // present only for premium tokens that asked for it
 
 		static final class Price
 		{
@@ -259,6 +261,12 @@ class ApiClient
 		{
 			String name;
 			Integer geLimit;
+		}
+
+		static final class Flip
+		{
+			Double margin; // quant-adjusted net margin per unit, gp
+			Double roi; // fraction
 		}
 	}
 
@@ -508,10 +516,12 @@ class ApiClient
 		requestJson(b.post(RequestBody.create(JSON, gson.toJson(new LinkPollPayload(deviceSecret)))).build(), LinkPoll.class, onResult);
 	}
 
-	/** Public live quote for the GE overlay - no account or token required. */
-	void fetchQuote(int itemId, Consumer<Quote> onResult)
+	/** Public live quote for the GE overlay - no account or token required. When
+	 *  `withFlip` is set, also asks for the premium Flip Finder margin (the server
+	 *  only returns it for a premium token; otherwise the field is simply absent). */
+	void fetchQuote(int itemId, boolean withFlip, Consumer<Quote> onResult)
 	{
-		final Request request = buildRequest("/api/items/" + itemId + "/quote?econ=1");
+		final Request request = buildRequest("/api/items/" + itemId + "/quote?econ=1" + (withFlip ? "&flip=1" : ""));
 		if (request == null)
 		{
 			onResult.accept(null);

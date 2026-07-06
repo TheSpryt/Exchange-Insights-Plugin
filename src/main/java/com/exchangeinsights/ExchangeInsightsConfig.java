@@ -79,7 +79,7 @@ public interface ExchangeInsightsConfig extends Config
 	@ConfigItem(
 		keyName = "inGameAlerts",
 		name = "In-game alerts",
-		description = "Deliver your watchlist alerts (RuneLite channel) in game as a chat message and system notification.",
+		description = "Deliver your watchlist alerts (RuneLite channel) in game. Each alert also appears as an infobox you can right-click to Clear or Open in your browser.",
 		section = streamsSection,
 		position = 3
 	)
@@ -89,13 +89,37 @@ public interface ExchangeInsightsConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "alertDelivery",
+		name = "Alert delivery",
+		description = "How in-game alerts are announced: a game chat message, a system notification, or both.",
+		section = streamsSection,
+		position = 4
+	)
+	default AlertDelivery alertDelivery()
+	{
+		return AlertDelivery.BOTH;
+	}
+
+	@ConfigItem(
 		keyName = "geOverlay",
 		name = "GE offer info",
 		description = "Add live insta-buy/insta-sell, after-tax item margin and buy limit to the item text in the Grand Exchange offer window. Reads public market data only - works without an account.",
 		section = streamsSection,
-		position = 4
+		position = 5
 	)
 	default boolean geOverlay()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "showFlipMargin",
+		name = "Premium: show flip margins",
+		description = "If your account is Premium, show the Flip Finder's quant-adjusted flip margin in the GE offer info instead of the plain item margin. No effect on free accounts.",
+		section = streamsSection,
+		position = 6
+	)
+	default boolean showFlipMargin()
 	{
 		return true;
 	}
@@ -105,7 +129,7 @@ public interface ExchangeInsightsConfig extends Config
 		name = "Offer age badges",
 		description = "On the GE offers screen, badge each active slot with whether your price is still ahead of the market (green) or the market has moved past it (red, with how far behind). Public market data only.",
 		section = streamsSection,
-		position = 5
+		position = 7
 	)
 	default boolean geSlotBadges()
 	{
@@ -117,7 +141,7 @@ public interface ExchangeInsightsConfig extends Config
 		name = "Left-click Collect to bank",
 		description = "Make the Grand Exchange Collect button send everything to your bank on left click. Collect to inventory stays available on right-click.",
 		section = streamsSection,
-		position = 6
+		position = 8
 	)
 	default boolean leftClickCollectToBank()
 	{
