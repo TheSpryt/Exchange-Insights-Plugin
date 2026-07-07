@@ -1228,10 +1228,14 @@ public class ExchangeInsightsPlugin extends Plugin
 				final String message = body.isEmpty() ? title : title + " - " + body;
 				if (delivery.notification())
 				{
-					// Override the global settings so the notification fires even while
-					// the client is focused (RuneLite suppresses focused notifications by
-					// default, which is why "notification" appeared to do nothing).
+					// Override the global settings so RuneLite's own notification fires
+					// even while the client is focused (it suppresses focused ones by
+					// default). Plus a desktop popup - reliable and unmissable regardless
+					// of the OS notification settings (the RuneLite tray toast can be
+					// silently suppressed by Windows Focus Assist etc.).
 					notifier.notify(ALERT_NOTIFICATION, "Exchange Insights: " + message);
+					SwingUtilities.invokeLater(() ->
+						JOptionPane.showMessageDialog(null, message, "Exchange Insights alert", JOptionPane.INFORMATION_MESSAGE));
 				}
 				if (delivery.chat())
 				{
