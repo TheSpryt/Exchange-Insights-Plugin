@@ -43,25 +43,6 @@ class ApiClient
 		this.config = config;
 	}
 
-	/** A single GE transaction. Field names match the /api/plugin/fills contract. */
-	static final class Fill
-	{
-		final int id;
-		final String type; // "buy" | "sell"
-		final int price;
-		final int qty;
-		final long filledAt; // unix seconds
-
-		Fill(int id, String type, int price, int qty, long filledAt)
-		{
-			this.id = id;
-			this.type = type;
-			this.price = price;
-			this.qty = qty;
-			this.filledAt = filledAt;
-		}
-	}
-
 	/** A generic plugin event (datamine, offer book, …). */
 	static final class Event
 	{
@@ -111,17 +92,6 @@ class ApiClient
 		Integer qty;
 		Integer filledQty;
 		Integer spent;
-	}
-
-	private static final class FillsPayload
-	{
-		final List<Fill> fills;
-		final String source = SOURCE;
-
-		FillsPayload(List<Fill> fills)
-		{
-			this.fills = fills;
-		}
 	}
 
 	private static final class OffersPayload
@@ -287,14 +257,6 @@ class ApiClient
 	private String base()
 	{
 		return config.baseUrl().trim().replaceAll("/+$", "");
-	}
-
-	void sendFills(List<Fill> fills)
-	{
-		if (!fills.isEmpty())
-		{
-			post("/api/plugin/fills", new FillsPayload(fills));
-		}
 	}
 
 	void sendEvents(List<Event> events)

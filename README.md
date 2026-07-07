@@ -92,9 +92,6 @@ to match your client. To run it against a local RuneLite, use the RuneLite
 (add this project's `src/main/java` to the client run configuration, or sideload
 the built jar).
 
-> The fill-tracking core (`FillTracker`) is framework-free and unit-tested; the
-> rest depends on the RuneLite client API, so build against the client jar.
-
 ## Privacy
 
 Everything is sent **only** to the URL you configure, authenticated with your own

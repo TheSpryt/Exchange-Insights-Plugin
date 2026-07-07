@@ -376,6 +376,9 @@ public class ExchangeInsightsPlugin extends Plugin
 		final GameState state = event.getGameState();
 		if (state != GameState.LOGGED_IN)
 		{
+			// Logged out / hopping - drop any half-done identity send so it re-arms cleanly
+			// on the next login rather than lingering true against a -1 account hash.
+			identityPending = false;
 			return;
 		}
 		identityPending = true;
