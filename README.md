@@ -2,6 +2,13 @@
 
 <p align="center"><b>Powered by <a href="https://exchange-insights.gg">Exchange-Insights.gg</a></b></p>
 
+<p align="center">
+  <a href="https://runelite.net/plugin-hub/show/exchange-insights"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fapi.runelite.net%2Fpluginhub%2Fshields%2Finstalls%2Fplugin%2Fexchange-insights&label=installs&color=brightgreen" alt="Plugin Hub installs"></a>
+  <a href="https://github.com/TheSpryt/Exchange-Insights-Plugin/releases/latest"><img src="https://img.shields.io/github/v/release/TheSpryt/Exchange-Insights-Plugin?label=version&color=blue" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/TheSpryt/Exchange-Insights-Plugin?label=license&color=orange" alt="License"></a>
+  <a href="https://runelite.net/plugin-hub/show/exchange-insights"><img src="https://img.shields.io/badge/RuneLite-Plugin%20Hub-yellow" alt="RuneLite Plugin Hub"></a>
+</p>
+
 # Exchange Insights RuneLite plugin
 
 The companion plugin for the [Exchange Insights](https://exchange-insights.gg)
