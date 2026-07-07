@@ -14,8 +14,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.inject.Inject;
-import javax.swing.JOptionPane;
-import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
@@ -257,16 +255,13 @@ public class ExchangeInsightsPlugin extends Plugin
 		}
 	}
 
-	/** Status for the link flow (there's no panel): a game chat line, a RuneLite
-	 *  notification, and a desktop popup so it can't be missed while you're in the
-	 *  browser. Shown off the client thread, so dispatch each to the right thread. */
+	/** Status for the link flow (there's no panel): a game chat line and a RuneLite
+	 *  notification. Shown off the client thread, so dispatch each to its thread. */
 	private void linkStatus(String message)
 	{
 		notifier.notify("Exchange Insights: " + message);
 		clientThread.invokeLater(() ->
 			client.addChatMessage(ChatMessageType.CONSOLE, "", "<col=b8860b>[Exchange Insights]</col> " + message, null));
-		SwingUtilities.invokeLater(() ->
-			JOptionPane.showMessageDialog(null, message, "Exchange Insights", JOptionPane.INFORMATION_MESSAGE));
 	}
 
 	/**
