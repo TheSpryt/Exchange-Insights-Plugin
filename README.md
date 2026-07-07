@@ -1,8 +1,12 @@
+[![Exchange Insights](https://exchange-insights.gg/banner.png)](https://exchange-insights.gg)
+
+<p align="center"><b>Powered by <a href="https://exchange-insights.gg">Exchange-Insights.gg</a></b></p>
+
 # Exchange Insights — RuneLite plugin
 
 The companion plugin for the [Exchange Insights](https://exchange-insights.gg)
 dashboard. It streams data only a logged-in client can see to the dashboard's
-ingest API ([API reference](https://github.com/TheSpryt/OSRS-Invest/blob/main/docs/PLUGIN-INGEST.md)):
+ingest API:
 
 - **GE fills** — every buy/sell you complete, so the dashboard can score
   **realized vs modeled** flip P&L (does the Flip Finder's spread actually get
