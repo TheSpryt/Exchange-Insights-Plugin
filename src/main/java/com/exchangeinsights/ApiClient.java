@@ -369,6 +369,10 @@ class ApiClient
 				{
 					if (!r.isSuccessful() || r.body() == null)
 					{
+						if (r.code() == 401)
+						{
+							authError = true;
+						}
 						log.debug("Exchange Insights: alerts poll returned {}", r.code());
 						return;
 					}
@@ -494,6 +498,22 @@ class ApiClient
 		requestJson(request, Quote.class, onResult);
 	}
 
+	// Set when any authenticated call comes back 401 (token rotated/revoked). The plugin
+	// polls consumeAuthError() to warn the user ONCE, instead of syncing failing silently
+	// forever - a fire-and-forget 401 is otherwise invisible.
+	private volatile boolean authError = false;
+
+	/** True at most once per rejection: whether an authenticated call was refused (401). */
+	boolean consumeAuthError()
+	{
+		if (authError)
+		{
+			authError = false;
+			return true;
+		}
+		return false;
+	}
+
 	private void post(String path, Object body)
 	{
 		if (!isConfigured())
@@ -520,7 +540,12 @@ class ApiClient
 			{
 				try (Response r = response)
 				{
-					if (!r.isSuccessful())
+					if (r.code() == 401)
+					{
+						authError = true;
+						log.warn("Exchange Insights: {} rejected (401) - plugin token invalid or revoked", path);
+					}
+					else if (!r.isSuccessful())
 					{
 						log.debug("Exchange Insights: {} returned {}", path, r.code());
 					}
