@@ -164,12 +164,14 @@ class ApiClient
 	{
 		final String accountHash;
 		final String rsn;
+		final String accountType;
 		final String source = SOURCE;
 
-		IdentityPayload(String accountHash, String rsn)
+		IdentityPayload(String accountHash, String rsn, String accountType)
 		{
 			this.accountHash = accountHash;
 			this.rsn = rsn;
+			this.accountType = accountType;
 		}
 	}
 
@@ -320,9 +322,9 @@ class ApiClient
 		}
 	}
 
-	void sendIdentity(long accountHash, String rsn)
+	void sendIdentity(long accountHash, String rsn, String accountType)
 	{
-		post("/api/plugin/identity", new IdentityPayload(Long.toString(accountHash), rsn));
+		post("/api/plugin/identity", new IdentityPayload(Long.toString(accountHash), rsn, accountType));
 	}
 
 	/**
