@@ -40,9 +40,12 @@ quant-adjusted Flip Finder economics stay a dashboard feature.)
 ## Linking your account
 
 To unlock the two-way features (live offer board, trade history, alerts, flip
-margins), generate a **plugin token** on the dashboard under **Account settings**
-and paste it into the plugin's **Plugin token** setting in RuneLite. That's it:
-there's no separate panel; everything is configured in the plugin settings.
+margins), tick **Link account in browser** in the plugin settings. It opens the
+dashboard in your browser; approve the link while signed in and the plugin
+receives its token and stores it automatically. You can also do it manually:
+generate a **plugin token** on the dashboard under **Account settings** and
+paste it into the plugin's **Plugin token** setting. Either way there's no
+separate panel; everything is configured in the plugin settings.
 
 ## How trades are captured (and why they're accurate)
 
@@ -67,6 +70,7 @@ In RuneLite → plugin settings:
 |---|---|---|
 | **Dashboard URL** | `https://exchange-insights.gg` | change only if you self-host |
 | **Plugin token** | *(empty)* | your personal token, generated on the dashboard under **Account settings** |
+| **Link account in browser** | *(button)* | tick to open the dashboard and approve; the token is fetched and stored for you |
 | **Sync GE offers & trades** | on | live offer board + verified trade history (needs a token) |
 | **Datamine new items** | on | bounded forward scan of item ids on login |
 | **In-game alerts** | on | watchlist alerts as a chat message and/or system notification |
