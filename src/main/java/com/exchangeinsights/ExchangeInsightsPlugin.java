@@ -14,6 +14,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.inject.Inject;
+import javax.swing.JOptionPane;
+import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
@@ -257,13 +259,17 @@ public class ExchangeInsightsPlugin extends Plugin
 		}
 	}
 
-	/** Status for the link flow (there's no panel): a game chat line and a RuneLite
-	 *  notification. Shown off the client thread, so dispatch each to its thread. */
+	/** Status for the account-link / connection flow (there's no panel). It's a user-initiated
+	 *  flow with a browser hand-off, so every step - and especially a failure (dashboard
+	 *  unreachable, link expired, denied) - is surfaced as an unmissable desktop popup, since the
+	 *  user is often looking at the browser or the plugin config, not the game chat. A chat line
+	 *  is also logged. (Behind-market / watchlist ALERTS deliberately stay notification-only.) */
 	private void linkStatus(String message)
 	{
-		notifier.notify("Exchange Insights: " + message);
 		clientThread.invokeLater(() ->
 			client.addChatMessage(ChatMessageType.CONSOLE, "", "<col=b8860b>[Exchange Insights]</col> " + message, null));
+		SwingUtilities.invokeLater(() ->
+			JOptionPane.showMessageDialog(null, message, "Exchange Insights", JOptionPane.INFORMATION_MESSAGE));
 	}
 
 	/**
