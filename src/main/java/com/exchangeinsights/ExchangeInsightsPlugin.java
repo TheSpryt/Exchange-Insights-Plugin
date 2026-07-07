@@ -37,7 +37,6 @@ import net.runelite.api.widgets.WidgetType;
 import net.runelite.client.Notifier;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
-import net.runelite.client.config.Notification;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.game.ItemManager;
@@ -263,7 +262,7 @@ public class ExchangeInsightsPlugin extends Plugin
 	 *  browser. Shown off the client thread, so dispatch each to the right thread. */
 	private void linkStatus(String message)
 	{
-		notifier.notify(ALERT_NOTIFICATION, "Exchange Insights: " + message);
+		notifier.notify("Exchange Insights: " + message);
 		clientThread.invokeLater(() ->
 			client.addChatMessage(ChatMessageType.CONSOLE, "", "<col=b8860b>[Exchange Insights]</col> " + message, null));
 		SwingUtilities.invokeLater(() ->
@@ -428,7 +427,23 @@ public class ExchangeInsightsPlugin extends Plugin
 		if (hash != identitySentHash)
 		{
 			identitySentHash = hash;
-			api.sendIdentity(hash, rsn);
+			api.sendIdentity(hash, rsn, accountType());
+		}
+	}
+
+	/** The logged-in character's account type, as a canonical string the dashboard
+	 *  understands. Without this every character shows as a regular "Main" account. */
+	private String accountType()
+	{
+		switch (client.getVarbitValue(Varbits.ACCOUNT_TYPE))
+		{
+			case 1: return "IRONMAN";
+			case 2: return "HARDCORE_IRONMAN";
+			case 3: return "ULTIMATE_IRONMAN";
+			case 4: return "GROUP_IRONMAN";
+			case 5: return "HARDCORE_GROUP_IRONMAN";
+			case 6: return "UNRANKED_GROUP_IRONMAN";
+			default: return "NORMAL";
 		}
 	}
 
@@ -1228,14 +1243,9 @@ public class ExchangeInsightsPlugin extends Plugin
 				final String message = body.isEmpty() ? title : title + " - " + body;
 				if (delivery.notification())
 				{
-					// Override the global settings so RuneLite's own notification fires
-					// even while the client is focused (it suppresses focused ones by
-					// default). Plus a desktop popup - reliable and unmissable regardless
-					// of the OS notification settings (the RuneLite tray toast can be
-					// silently suppressed by Windows Focus Assist etc.).
-					notifier.notify(ALERT_NOTIFICATION, "Exchange Insights: " + message);
-					SwingUtilities.invokeLater(() ->
-						JOptionPane.showMessageDialog(null, message, "Exchange Insights alert", JOptionPane.INFORMATION_MESSAGE));
+					// Fires through RuneLite's own notifier, honouring the user's
+					// Notification settings (tray toast, sound, flash, send-when-focused).
+					notifier.notify("Exchange Insights: " + message);
 				}
 				if (delivery.chat())
 				{
@@ -1245,9 +1255,6 @@ public class ExchangeInsightsPlugin extends Plugin
 			}
 		});
 	}
-
-	// Alert notification that ignores the "don't notify when focused" default.
-	private static final Notification ALERT_NOTIFICATION = Notification.ON.withOverride(true).withSendWhenFocused(true);
 
 	@Subscribe
 	public void onGrandExchangeOfferChanged(GrandExchangeOfferChanged event)
