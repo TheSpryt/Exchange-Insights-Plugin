@@ -107,6 +107,8 @@ public class ExchangeInsightsPlugin extends Plugin
 	// there and completed on the first tick that has it).
 	private boolean identityPending = false;
 	private long identitySentHash = -1;
+	// Throttle the "token rejected" warning so a stream of failed pushes warns once, not every tick.
+	private long lastAuthWarnMs = 0;
 
 	// Live offer book: set on any offer change (incl. the login re-broadcast burst),
 	// drained once per tick so a burst produces a single full-book push.
@@ -409,6 +411,15 @@ public class ExchangeInsightsPlugin extends Plugin
 		updateSlotQuotes();
 		updateSlotTitles();
 		flushOfferBook();
+
+		// If the server rejected our token (rotated/revoked), tell the user once - otherwise
+		// syncing just stops silently and the dashboard quietly goes stale.
+		if (api.consumeAuthError() && System.currentTimeMillis() - lastAuthWarnMs > 300_000)
+		{
+			lastAuthWarnMs = System.currentTimeMillis();
+			clientThread.invokeLater(() -> client.addChatMessage(ChatMessageType.CONSOLE, "",
+				"<col=b8860b>[Exchange Insights]</col> Your plugin token was rejected (rotated or revoked). Re-link in the plugin settings (tick \"Link account in browser\") to resume syncing.", null));
+		}
 
 		if (!identityPending || !api.isConfigured())
 		{
