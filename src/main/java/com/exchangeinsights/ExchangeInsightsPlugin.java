@@ -8,7 +8,6 @@ import java.awt.image.BufferedImage;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,13 +31,13 @@ import net.runelite.api.events.GameTick;
 import net.runelite.api.events.GrandExchangeOfferChanged;
 import net.runelite.api.events.MenuEntryAdded;
 import net.runelite.api.gameval.InterfaceID;
-import net.runelite.client.events.OverlayMenuClicked;
 import net.runelite.api.widgets.JavaScriptCallback;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetType;
 import net.runelite.client.Notifier;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
+import net.runelite.client.config.Notification;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.game.ItemManager;
@@ -46,7 +45,6 @@ import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.task.Schedule;
 import net.runelite.client.ui.overlay.OverlayManager;
-import net.runelite.client.ui.overlay.infobox.InfoBoxManager;
 import net.runelite.client.util.ImageUtil;
 import net.runelite.client.util.LinkBrowser;
 
@@ -97,9 +95,6 @@ public class ExchangeInsightsPlugin extends Plugin
 	private ExchangeInsightsSlotOverlay slotOverlay;
 
 	@Inject
-	private InfoBoxManager infoBoxManager;
-
-	@Inject
 	private ScheduledExecutorService executor;
 
 	@Inject
@@ -109,12 +104,6 @@ public class ExchangeInsightsPlugin extends Plugin
 
 	// Browser device-link flow: true while a link approval is pending.
 	private volatile boolean linking = false;
-
-	// Alert infoboxes (client-thread state): the boxes shown and a lookup from each
-	// box's right-click menu entry to its action (Clear / Open).
-	private BufferedImage alertIcon;
-	private final List<AlertInfoBox> alertBoxes = new ArrayList<>();
-	private final Map<Object, Runnable> alertBoxActions = new HashMap<>();
 
 	// Identity sync: which character this client is logged into, reported once per
 	// login (RSN isn't available the instant LOGGED_IN fires, so the send is armed
@@ -212,11 +201,9 @@ public class ExchangeInsightsPlugin extends Plugin
 		identityPending = client.getGameState() == GameState.LOGGED_IN;
 		identitySentHash = -1;
 
-		// Shared icon: the alert infoboxes and the clickable margins-link sprite in
-		// the GE offer body (the plugin has no sidebar panel - config lives in the
-		// RuneLite plugin settings).
+		// Icon for the clickable margins-link sprite in the GE offer body (the plugin
+		// has no sidebar panel - config lives in the RuneLite plugin settings).
 		final BufferedImage icon = ImageUtil.loadImageResource(ExchangeInsightsPlugin.class, "panel_icon.png");
-		alertIcon = icon;
 		clientThread.invoke(() -> client.getSpriteOverrides().put(EI_SPRITE_ID, ImageUtil.getImageSpritePixels(icon, client)));
 		overlayManager.add(slotOverlay);
 
@@ -233,15 +220,6 @@ public class ExchangeInsightsPlugin extends Plugin
 		currentGeItem = -1;
 		slotQuotes.clear();
 		slotQuoteFetchedAt.clear();
-		clientThread.invoke(() ->
-		{
-			for (final AlertInfoBox box : new ArrayList<>(alertBoxes))
-			{
-				infoBoxManager.removeInfoBox(box);
-			}
-			alertBoxes.clear();
-			alertBoxActions.clear();
-		});
 		overlayManager.remove(slotOverlay);
 		final Widget button = geLinkButton;
 		geLinkButton = null;
@@ -285,7 +263,7 @@ public class ExchangeInsightsPlugin extends Plugin
 	 *  browser. Shown off the client thread, so dispatch each to the right thread. */
 	private void linkStatus(String message)
 	{
-		notifier.notify("Exchange Insights: " + message);
+		notifier.notify(ALERT_NOTIFICATION, "Exchange Insights: " + message);
 		clientThread.invokeLater(() ->
 			client.addChatMessage(ChatMessageType.CONSOLE, "", "<col=b8860b>[Exchange Insights]</col> " + message, null));
 		SwingUtilities.invokeLater(() ->
@@ -1250,66 +1228,22 @@ public class ExchangeInsightsPlugin extends Plugin
 				final String message = body.isEmpty() ? title : title + " - " + body;
 				if (delivery.notification())
 				{
-					notifier.notify("Exchange Insights: " + message);
+					// Override the global settings so the notification fires even while
+					// the client is focused (RuneLite suppresses focused notifications by
+					// default, which is why "notification" appeared to do nothing).
+					notifier.notify(ALERT_NOTIFICATION, "Exchange Insights: " + message);
 				}
 				if (delivery.chat())
 				{
 					clientThread.invokeLater(() ->
 						client.addChatMessage(ChatMessageType.CONSOLE, "", "<col=b8860b>[Exchange Insights]</col> " + message, null));
 				}
-				// An actionable infobox always accompanies the alert - right-click to
-				// Clear it or Open the subject in the browser. Infobox state is only
-				// touched on the client thread (add here, click handler, cleanup).
-				final String link = alert.link;
-				clientThread.invokeLater(() -> addAlertInfoBox(title, message, link));
 			}
 		});
 	}
 
-	private static final int MAX_ALERT_BOXES = 6;
-
-	/** Add an alert infobox (capped) and register its right-click actions. */
-	private void addAlertInfoBox(String title, String message, String link)
-	{
-		final AlertInfoBox box = new AlertInfoBox(alertIcon, this, title, message, link);
-		alertBoxes.add(box);
-		alertBoxActions.put(box.clearEntry, () -> removeAlertInfoBox(box));
-		if (box.openEntry != null)
-		{
-			alertBoxActions.put(box.openEntry, () -> LinkBrowser.browse(box.link));
-		}
-		infoBoxManager.addInfoBox(box);
-		// Keep only the most recent few so a run of alerts can't stack up forever.
-		while (alertBoxes.size() > MAX_ALERT_BOXES)
-		{
-			removeAlertInfoBox(alertBoxes.get(0));
-		}
-	}
-
-	private void removeAlertInfoBox(AlertInfoBox box)
-	{
-		if (box == null || !alertBoxes.remove(box))
-		{
-			return;
-		}
-		alertBoxActions.remove(box.clearEntry);
-		if (box.openEntry != null)
-		{
-			alertBoxActions.remove(box.openEntry);
-		}
-		infoBoxManager.removeInfoBox(box);
-	}
-
-	/** Route right-click actions on our alert infoboxes (Clear / Open). */
-	@Subscribe
-	public void onOverlayMenuClicked(OverlayMenuClicked event)
-	{
-		final Runnable action = alertBoxActions.get(event.getEntry());
-		if (action != null)
-		{
-			action.run();
-		}
-	}
+	// Alert notification that ignores the "don't notify when focused" default.
+	private static final Notification ALERT_NOTIFICATION = Notification.ON.withOverride(true).withSendWhenFocused(true);
 
 	@Subscribe
 	public void onGrandExchangeOfferChanged(GrandExchangeOfferChanged event)
