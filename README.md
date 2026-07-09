@@ -90,25 +90,3 @@ In RuneLite → plugin settings:
 Nothing about your account or activity is sent until a token is set (the GE
 overlay only *downloads* public prices). The token is per-user and revocable from
 the account page; it attributes everything this plugin sends to your account.
-
-## Building
-
-This is a standard RuneLite external plugin (Gradle). A Gradle wrapper is
-included, so no system Gradle install is needed:
-
-```bash
-cd plugin
-./gradlew build         # downloads Gradle 8.14.3 on first run; use gradlew.bat on Windows
-```
-
-`build.gradle` pins a known-good RuneLite client version (`compileOnly`); bump it
-to match your client. To run it against a local RuneLite, use the RuneLite
-[external-plugin developer workflow](https://github.com/runelite/example-plugin)
-(add this project's `src/main/java` to the client run configuration, or sideload
-the built jar).
-
-## Privacy
-
-Everything is sent **only** to the URL you configure, authenticated with your own
-token. There is no third-party telemetry. This plugin does not automate the game
-or read anything beyond your own GE activity and the public item cache.

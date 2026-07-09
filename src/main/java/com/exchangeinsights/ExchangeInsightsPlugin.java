@@ -288,11 +288,6 @@ public class ExchangeInsightsPlugin extends Plugin
 			linkStatus("Already linked - clear the Plugin token first if you want to re-link.");
 			return;
 		}
-		if (!api.hasUrl())
-		{
-			linkStatus("Set the Dashboard URL first, then tick Link account again.");
-			return;
-		}
 		if (client.getGameState() != GameState.LOGGED_IN || client.getAccountHash() == -1)
 		{
 			linkStatus("Log into OSRS first, then tick Link account - it ties this character to your account.");
