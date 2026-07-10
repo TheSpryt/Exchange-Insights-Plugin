@@ -1,6 +1,4 @@
-[![Exchange Insights](https://exchange-insights.gg/banner.png)](https://exchange-insights.gg)
-
-<p align="center"><b>Powered by <a href="https://exchange-insights.gg">Exchange-Insights.gg</a></b></p>
+<p align="center"><b>Powered by Exchange-Insights.gg</b></p>
 
 <p align="center">
   <a href="https://runelite.net/plugin-hub/show/exchange-insights"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fapi.runelite.net%2Fpluginhub%2Fshields%2Finstalls%2Fplugin%2Fexchange-insights&label=installs&color=brightgreen" alt="Plugin Hub installs"></a>
@@ -11,9 +9,8 @@
 
 # Exchange Insights RuneLite plugin
 
-The companion plugin for the [Exchange Insights](https://exchange-insights.gg)
-dashboard. It streams data only a logged-in client can see to the dashboard's
-ingest API:
+The companion plugin for the Exchange Insights dashboard. It streams data only a
+logged-in client can see to the dashboard's ingest API:
 
 - **GE fills**: every buy/sell you complete, so the dashboard can score
   **realized vs modeled** flip P&L (does the Flip Finder's spread actually get
