@@ -34,13 +34,6 @@ public interface ExchangeInsightsConfig extends Config
 	)
 	String premiumSection = "premium";
 
-	// The dashboard URL is fixed (not user-configurable). Kept as a method so the
-	// rest of the plugin can keep calling config.baseUrl().
-	default String baseUrl()
-	{
-		return "https://exchange-insights.gg";
-	}
-
 	@ConfigItem(
 		keyName = "token",
 		name = "Plugin token",
