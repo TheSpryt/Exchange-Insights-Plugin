@@ -873,7 +873,7 @@ public class ExchangeInsightsPlugin extends Plugin
 		{
 			// Premium + quant flips on → open the item's flips; otherwise its margins.
 			final String tab = config.showFlipMargin() && premiumFlip ? "flips" : "margins";
-			LinkBrowser.browse(config.baseUrl().trim().replaceAll("/+$", "") + "/#" + tab + "?item=" + id);
+			LinkBrowser.browse(ApiClient.DASHBOARD_URL + "/#" + tab + "?item=" + id);
 		}
 	}
 

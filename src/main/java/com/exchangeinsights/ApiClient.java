@@ -29,7 +29,11 @@ import okhttp3.Response;
 class ApiClient
 {
 	private static final MediaType JSON = MediaType.get("application/json");
-	private static final String SOURCE = "exchange-insights-plugin/1.1.0";
+	private static final String SOURCE = "exchange-insights-plugin/1.1.1";
+	/** The dashboard is fixed (not user-configurable). A plain constant rather than a
+	 *  Config method: RuneLite's Config proxy returns null for interface methods with
+	 *  no @ConfigItem, which would NPE the moment the plugin starts. */
+	static final String DASHBOARD_URL = "https://exchange-insights.gg";
 
 	private final OkHttpClient http;
 	private final Gson gson;
@@ -256,7 +260,7 @@ class ApiClient
 
 	private String base()
 	{
-		return config.baseUrl().trim().replaceAll("/+$", "");
+		return DASHBOARD_URL;
 	}
 
 	void sendEvents(List<Event> events)
