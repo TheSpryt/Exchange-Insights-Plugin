@@ -29,7 +29,7 @@ import okhttp3.Response;
 class ApiClient
 {
 	private static final MediaType JSON = MediaType.get("application/json");
-	private static final String SOURCE = "exchange-insights-plugin/1.1.1";
+	private static final String SOURCE = "exchange-insights-plugin/1.1.2";
 	/** The dashboard is fixed (not user-configurable). A plain constant rather than a
 	 *  Config method: RuneLite's Config proxy returns null for interface methods with
 	 *  no @ConfigItem, which would NPE the moment the plugin starts. */
@@ -38,13 +38,35 @@ class ApiClient
 	private final OkHttpClient http;
 	private final Gson gson;
 	private final ExchangeInsightsConfig config;
+	private final net.runelite.client.config.ConfigManager configManager;
+
+	// The Bank Templates plugin's config coordinates (see BankTemplatesConfig in that plugin).
+	static final String BT_PLUGIN_CONFIG_GROUP = "banktemplates";
+	static final String BT_PLUGIN_TOKEN_KEY = "eiAccountToken";
 
 	@Inject
-	ApiClient(OkHttpClient http, Gson gson, ExchangeInsightsConfig config)
+	ApiClient(OkHttpClient http, Gson gson, ExchangeInsightsConfig config, net.runelite.client.config.ConfigManager configManager)
 	{
 		this.http = http;
 		this.gson = gson;
 		this.config = config;
+		this.configManager = configManager;
+	}
+
+	/** The bearer token to present: this plugin's own configured token when set, otherwise the
+	 *  Bank Templates plugin's token from this client's local RuneLite config (the mirror of Bank
+	 *  Templates borrowing ours - same account, one credential to revoke). Read live on every use
+	 *  and never copied, so clearing or revoking it in either plugin takes effect immediately.
+	 *  Nothing is ever fetched from a server. Empty string when neither plugin has a token. */
+	String effectiveToken()
+	{
+		final String own = config.token();
+		if (own != null && !own.trim().isEmpty())
+		{
+			return own.trim();
+		}
+		final String bt = configManager.getConfiguration(BT_PLUGIN_CONFIG_GROUP, BT_PLUGIN_TOKEN_KEY);
+		return bt == null ? "" : bt.trim();
 	}
 
 	/** A generic plugin event (datamine, offer book, …). */
@@ -140,12 +162,16 @@ class ApiClient
 		final String rsn;
 		final String accountType;
 		final String source = SOURCE;
+		// A deliberate user link action (pasted token). Lifts a server-side unlink tombstone;
+		// ambient on-login identity posts omit it so an unlinked character stays unlinked.
+		final Boolean explicit;
 
-		IdentityPayload(String accountHash, String rsn, String accountType)
+		IdentityPayload(String accountHash, String rsn, String accountType, boolean explicit)
 		{
 			this.accountHash = accountHash;
 			this.rsn = rsn;
 			this.accountType = accountType;
+			this.explicit = explicit ? Boolean.TRUE : null;
 		}
 	}
 
@@ -249,7 +275,7 @@ class ApiClient
 	/** Fully configured for the authenticated streams (fills, identity, alerts). */
 	boolean isConfigured()
 	{
-		return hasUrl() && !config.token().trim().isEmpty();
+		return hasUrl() && !effectiveToken().isEmpty();
 	}
 
 	/** A dashboard URL is set - enough for the public reads (quote, device link). */
@@ -288,9 +314,9 @@ class ApiClient
 		}
 	}
 
-	void sendIdentity(long accountHash, String rsn, String accountType)
+	void sendIdentity(long accountHash, String rsn, String accountType, boolean explicit)
 	{
-		post("/api/plugin/identity", new IdentityPayload(Long.toString(accountHash), rsn, accountType));
+		post("/api/plugin/identity", new IdentityPayload(Long.toString(accountHash), rsn, accountType, explicit));
 	}
 
 	/**
@@ -408,7 +434,7 @@ class ApiClient
 			final Request.Builder b = new Request.Builder()
 				.url(base + path)
 				.addHeader("User-Agent", SOURCE);
-			final String token = config.token().trim();
+			final String token = effectiveToken();
 			if (!token.isEmpty())
 			{
 				b.addHeader("Authorization", "Bearer " + token);

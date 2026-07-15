@@ -109,6 +109,9 @@ public class ExchangeInsightsPlugin extends Plugin
 	// there and completed on the first tick that has it).
 	private boolean identityPending = false;
 	private long identitySentHash = -1;
+	// One-shot: the next identity send is a deliberate user link action (a pasted token), which
+	// lifts a server-side unlink tombstone. Ambient on-login sends leave it false.
+	private boolean identityExplicit = false;
 	// Throttle the "token rejected" warning so a stream of failed pushes warns once, not every tick.
 	private long lastAuthWarnMs = 0;
 
@@ -256,6 +259,20 @@ public class ExchangeInsightsPlugin extends Plugin
 		{
 			configManager.setConfiguration(ExchangeInsightsConfig.GROUP, "linkAccount", false);
 			startAccountLink();
+			return;
+		}
+		// Pasting a token here is an explicit link request; the Bank Templates token changing on
+		// this client re-links ambiently (we borrow it when we have none of our own).
+		final boolean ownToken = ExchangeInsightsConfig.GROUP.equals(event.getGroup()) && "token".equals(event.getKey());
+		final boolean btToken = ApiClient.BT_PLUGIN_CONFIG_GROUP.equals(event.getGroup()) && ApiClient.BT_PLUGIN_TOKEN_KEY.equals(event.getKey());
+		if (ownToken || btToken)
+		{
+			if (ownToken && event.getNewValue() != null && !event.getNewValue().trim().isEmpty())
+			{
+				identityExplicit = true;
+			}
+			identitySentHash = -1;
+			identityPending = client.getGameState() == GameState.LOGGED_IN;
 		}
 	}
 
@@ -437,7 +454,9 @@ public class ExchangeInsightsPlugin extends Plugin
 		if (hash != identitySentHash)
 		{
 			identitySentHash = hash;
-			api.sendIdentity(hash, rsn, accountType());
+			final boolean explicit = identityExplicit;
+			identityExplicit = false;
+			api.sendIdentity(hash, rsn, accountType(), explicit);
 		}
 	}
 
