@@ -37,7 +37,7 @@ public interface ExchangeInsightsConfig extends Config
 	@ConfigItem(
 		keyName = "token",
 		name = "Plugin token",
-		description = "Your personal plugin token - generate it on the dashboard under Account settings, or use 'Link account in browser' below. Treat it like a password.",
+		description = "Your personal plugin token - generate it on the dashboard under Account settings, or use 'Link account in browser' below. Treat it like a password. If you leave this empty and the Bank Templates plugin has a token configured, that one is used automatically.",
 		secret = true,
 		section = connectionSection,
 		position = 1
