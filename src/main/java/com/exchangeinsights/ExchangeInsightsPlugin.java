@@ -106,12 +106,13 @@ public class ExchangeInsightsPlugin extends Plugin
 
 	// Identity sync: which character this client is logged into, reported once per
 	// login (RSN isn't available the instant LOGGED_IN fires, so the send is armed
-	// there and completed on the first tick that has it).
-	private boolean identityPending = false;
-	private long identitySentHash = -1;
+	// there and completed on the first tick that has it). Volatile: config changes
+	// (Swing thread) arm these, the game tick (client thread) consumes them.
+	private volatile boolean identityPending = false;
+	private volatile long identitySentHash = -1;
 	// One-shot: the next identity send is a deliberate user link action (a pasted token), which
 	// lifts a server-side unlink tombstone. Ambient on-login sends leave it false.
-	private boolean identityExplicit = false;
+	private volatile boolean identityExplicit = false;
 	// Throttle the "token rejected" warning so a stream of failed pushes warns once, not every tick.
 	private long lastAuthWarnMs = 0;
 
