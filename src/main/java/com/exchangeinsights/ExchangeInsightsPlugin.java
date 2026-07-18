@@ -579,8 +579,11 @@ public class ExchangeInsightsPlugin extends Plugin
 				final int cls = classifyAge(buy, gap);
 				final String col = cls > 0 ? COL_UP : cls < 0 ? COL_DOWN : COL_WARN;
 				final int clamped = (int) Math.min(Integer.MAX_VALUE, Math.abs(gap));
-				final String amount = gap == 0 ? "at market"
-					: (gap > 0 ? "+" : "-") + net.runelite.client.util.QuantityFormatter.quantityToRSDecimalStack(clamped, true);
+				// Under 1,000 the RS stack format prints the bare number, and "Buy -3" next to
+				// "Buy -3.607M" reads like a broken abbreviation - spell out that it's 3 gp.
+				final String stack = net.runelite.client.util.QuantityFormatter.quantityToRSDecimalStack(clamped, true)
+					+ (clamped < 1000 ? " gp" : "");
+				final String amount = gap == 0 ? "at market" : (gap > 0 ? "+" : "-") + stack;
 				lastSlotDesired[i] = base + " <col=" + col + ">" + amount + "</col>";
 			}
 			// Find the title child fresh each tick: `slot` is re-fetched per tick so
