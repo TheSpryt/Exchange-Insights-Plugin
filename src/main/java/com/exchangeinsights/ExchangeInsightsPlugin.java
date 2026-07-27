@@ -1322,6 +1322,11 @@ public class ExchangeInsightsPlugin extends Plugin
 		{
 			return;
 		}
+		final long accountHash = client.getAccountHash();
+		if (accountHash == -1)
+		{
+			return; // logged out - no character to attribute the offer book to
+		}
 		final GrandExchangeOffer[] offers = client.getGrandExchangeOffers();
 		if (offers == null)
 		{
@@ -1345,7 +1350,7 @@ public class ExchangeInsightsPlugin extends Plugin
 			}
 			book.add(s);
 		}
-		api.sendOffers(book);
+		api.sendOffers(Long.toString(accountHash), book);
 	}
 
 	/**
