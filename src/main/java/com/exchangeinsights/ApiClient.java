@@ -122,11 +122,13 @@ class ApiClient
 
 	private static final class OffersPayload
 	{
+		final String accountHash;
 		final List<OfferSlot> offers;
 		final String source = SOURCE;
 
-		OffersPayload(List<OfferSlot> offers)
+		OffersPayload(String accountHash, List<OfferSlot> offers)
 		{
+			this.accountHash = accountHash;
 			this.offers = offers;
 		}
 	}
@@ -297,12 +299,13 @@ class ApiClient
 		}
 	}
 
-	/** Push the full GE offer book snapshot (all slots, EMPTY included). */
-	void sendOffers(List<OfferSlot> offers)
+	/** Push the full GE offer book snapshot (all slots, EMPTY included) for one character. The
+	 *  accountHash keys the book per character so a user's alts each keep their own 8 slots. */
+	void sendOffers(String accountHash, List<OfferSlot> offers)
 	{
 		if (!offers.isEmpty())
 		{
-			post("/api/plugin/offers", new OffersPayload(offers));
+			post("/api/plugin/offers", new OffersPayload(accountHash, offers));
 		}
 	}
 
