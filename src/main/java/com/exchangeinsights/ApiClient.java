@@ -40,10 +40,6 @@ class ApiClient
 	private final ExchangeInsightsConfig config;
 	private final net.runelite.client.config.ConfigManager configManager;
 
-	// The Bank Templates plugin's config coordinates (see BankTemplatesConfig in that plugin).
-	static final String BT_PLUGIN_CONFIG_GROUP = "banktemplates";
-	static final String BT_PLUGIN_TOKEN_KEY = "eiAccountToken";
-
 	@Inject
 	ApiClient(OkHttpClient http, Gson gson, ExchangeInsightsConfig config, net.runelite.client.config.ConfigManager configManager)
 	{
@@ -54,19 +50,22 @@ class ApiClient
 	}
 
 	/** The bearer token to present: this plugin's own configured token when set, otherwise the
-	 *  Bank Templates plugin's token from this client's local RuneLite config (the mirror of Bank
-	 *  Templates borrowing ours - same account, one credential to revoke). Read live on every use
-	 *  and never copied, so clearing or revoking it in either plugin takes effect immediately.
-	 *  Nothing is ever fetched from a server. Empty string when neither plugin has a token. */
+	 *  one in the shared account slot (see SharedAccountToken). The plugins used to read each
+	 *  other's config keys directly, which meant every new plugin required editing all the
+	 *  existing ones; they now meet at a single agreed location instead. Read live on every use
+	 *  and never copied, so clearing or revoking it anywhere takes effect immediately. Nothing is
+	 *  ever fetched from a server. Empty string when nothing is linked. */
 	String effectiveToken()
 	{
 		final String own = config.token();
 		if (own != null && !own.trim().isEmpty())
 		{
+			// Promote an explicitly pasted token so the other plugins pick it up too.
+			SharedAccountToken.set(configManager, own.trim());
 			return own.trim();
 		}
-		final String bt = configManager.getConfiguration(BT_PLUGIN_CONFIG_GROUP, BT_PLUGIN_TOKEN_KEY);
-		return bt == null ? "" : bt.trim();
+		final String shared = SharedAccountToken.get(configManager);
+		return shared == null ? "" : shared;
 	}
 
 	/** A generic plugin event (datamine, offer book, …). */

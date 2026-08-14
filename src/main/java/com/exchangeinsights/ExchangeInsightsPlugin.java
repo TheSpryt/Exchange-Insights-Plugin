@@ -262,11 +262,11 @@ public class ExchangeInsightsPlugin extends Plugin
 			startAccountLink();
 			return;
 		}
-		// Pasting a token here is an explicit link request; the Bank Templates token changing on
-		// this client re-links ambiently (we borrow it when we have none of our own).
+		// Pasting a token here is an explicit link request; the shared slot changing on this
+		// client re-links ambiently (we use it when we have none of our own).
 		final boolean ownToken = ExchangeInsightsConfig.GROUP.equals(event.getGroup()) && "token".equals(event.getKey());
-		final boolean btToken = ApiClient.BT_PLUGIN_CONFIG_GROUP.equals(event.getGroup()) && ApiClient.BT_PLUGIN_TOKEN_KEY.equals(event.getKey());
-		if (ownToken || btToken)
+		final boolean sharedToken = SharedAccountToken.isTokenKey(event.getGroup(), event.getKey());
+		if (ownToken || sharedToken)
 		{
 			if (ownToken && event.getNewValue() != null && !event.getNewValue().trim().isEmpty())
 			{
@@ -357,6 +357,8 @@ public class ExchangeInsightsPlugin extends Plugin
 			{
 				// Storing the token is all it takes to be linked.
 				configManager.setConfiguration(ExchangeInsightsConfig.GROUP, "token", res.token);
+				// Also publish to the shared slot so every plugin in the family is linked at once.
+				SharedAccountToken.set(configManager, res.token);
 				linkStatus("Linked! Your account is connected.");
 			}
 			else
